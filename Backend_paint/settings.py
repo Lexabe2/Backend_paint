@@ -9,7 +9,7 @@ SECRET_KEY = 'django-insecure-qxzwo^3l_q6+*+#va=(4fj9llc4kibg%^035tzxgvri$0v+1$k
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    'lexabe2-backend-paint-bb6c.twc1.net',  # для Timeweb
+    'api-baopaint.ru',  # для Timeweb
     '127.0.0.1',                            # для локального запуска
     'localhost',
 ]
