@@ -8,7 +8,7 @@ SECRET_KEY = 'django-insecure-qxzwo^3l_q6+*+#va=(4fj9llc4kibg%^035tzxgvri$0v+1$k
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['lexabe2-backend-paint-bb6c.twc1.net']
 
 # Application definition
 
