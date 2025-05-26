@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.env
+
+# Django
+/static/
+media/
+
+
+# System
+.DS_Store
+Thumbs.db
