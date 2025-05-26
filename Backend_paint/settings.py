@@ -41,7 +41,8 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Vite dev server (React)
+    "http://localhost:5173",
+    'baopaint.ru'# Vite dev server (React)
 ]
 
 CSRF_TRUSTED_ORIGINS = ['https://api-baopaint.ru']
