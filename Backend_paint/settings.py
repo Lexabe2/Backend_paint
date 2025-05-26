@@ -44,6 +44,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite dev server (React)
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://lexabe2-backend-paint-bb6c.twc1.net",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
