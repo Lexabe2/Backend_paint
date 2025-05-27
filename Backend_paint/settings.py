@@ -138,3 +138,6 @@ STATIC_URL = 'static/'
 AUTH_USER_MODEL = 'Backend_paint_app.CustomUser'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+print("⚙ DJANGO SETTINGS LOADED FROM:", __file__)
+print("ALLOWED_HOSTS:", ALLOWED_HOSTS)
