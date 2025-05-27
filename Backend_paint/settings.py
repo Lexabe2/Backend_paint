@@ -85,16 +85,27 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'Backend_paint.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'default_db',  # имя базы данных
-        'USER': 'gen_user',  # имя пользователя
-        'PASSWORD': 'dfdfyz12',  # пароль
-        'HOST': '89.223.125.202',  # адрес сервера базы
-        'PORT': '5432',  # порт
+DJANGO_ENV = os.getenv('DJANGO_ENV')
+
+if DJANGO_ENV == 'production':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME'),
+            'USER': os.getenv('DB_USER'),
+            'PASSWORD': os.getenv('DB_PASSWORD'),
+            'HOST': os.getenv('DB_HOST'),
+            'PORT': os.getenv('DB_PORT'),
+        }
     }
-}
+else:
+    # локальная разработка
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
