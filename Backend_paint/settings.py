@@ -47,7 +47,6 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",       # фронтенд локально
     "http://127.0.0.1:5173",       # иногда используется вместо localhost
     "https://baopaint.ru",         # фронтенд на проде
-    "http://baopaint.ru"
 ]
 
 CSRF_TRUSTED_ORIGINS = ['https://api-baopaint.ru']
