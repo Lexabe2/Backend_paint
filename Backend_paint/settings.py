@@ -45,7 +45,7 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     'https://baopaint.ru',
-    '2.59.42.161'
+    '82.97.243.54'
 ]
 
 CSRF_TRUSTED_ORIGINS = ['https://api-baopaint.ru']
