@@ -1,9 +1,14 @@
 from datetime import timedelta
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "fallback-insecure-key")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-qxzwo^3l_q6+*+#va=(4fj9llc4kibg%^035tzxgvri$0v+1$k'
 
 DEBUG = True
 
@@ -13,7 +18,6 @@ ALLOWED_HOSTS = [
     'localhost',
     '2.59.42.161',  # 👈 добавь это
 ]
-
 
 INSTALLED_APPS = [
     'Backend_paint_app',
@@ -40,8 +44,9 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    'https://baopaint.ru',
+    "http://localhost:5173",       # фронтенд локально
+    "http://127.0.0.1:5173",       # иногда используется вместо localhost
+    "https://baopaint.ru",         # фронтенд на проде
 ]
 
 CSRF_TRUSTED_ORIGINS = ['https://api-baopaint.ru']
@@ -80,18 +85,16 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'Backend_paint.wsgi.application'
 
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'default_db',          # имя базы данных
-        'USER': 'gen_user',            # имя пользователя
-        'PASSWORD': 'dfdfyz12',        # пароль
-        'HOST': '89.223.125.202',      # адрес сервера базы
-        'PORT': '5432',                # порт
+        'NAME': 'default_db',  # имя базы данных
+        'USER': 'gen_user',  # имя пользователя
+        'PASSWORD': 'dfdfyz12',  # пароль
+        'HOST': '89.223.125.202',  # адрес сервера базы
+        'PORT': '5432',  # порт
     }
 }
-
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -108,7 +111,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 LANGUAGE_CODE = 'ru'
 
 TIME_ZONE = 'UTC'
@@ -117,13 +119,8 @@ USE_I18N = True
 
 USE_TZ = True
 
-
 STATIC_URL = 'static/'
-
 
 AUTH_USER_MODEL = 'Backend_paint_app.CustomUser'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-print("⚙ DJANGO SETTINGS LOADED FROM:", __file__)
-print("ALLOWED_HOSTS:", ALLOWED_HOSTS)

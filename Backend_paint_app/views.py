@@ -7,8 +7,9 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+import os
 
-BOT_TOKEN = '7867825371:AAGNc1Gb6XfA3FoXGll4JSIBrhRmXqjcEjU'
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 
 class LoginStep1View(APIView):
