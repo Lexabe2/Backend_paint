@@ -1,17 +1,19 @@
 from datetime import timedelta
 from pathlib import Path
+import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-qxzwo^3l_q6+*+#va=(4fj9llc4kibg%^035tzxgvri$0v+1$k'
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "fallback-unsafe-key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    'api-baopaint.ru',  # для Timeweb
-    '127.0.0.1',                            # для локального запуска
+    'api-baopaint.ru',
+    '127.0.0.1',
     'localhost',
+    '2.59.42.161',  # 👈 добавь это
 ]
 
 # Application definition
