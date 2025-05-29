@@ -13,10 +13,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    'api-baopaint.ru',
+    'api.baopaint.ru',
     '127.0.0.1',
     'localhost',
-    '2.59.42.161',  # 👈 добавь это
+    '176.57.213.199',  # 👈 добавь это
 ]
 
 INSTALLED_APPS = [
