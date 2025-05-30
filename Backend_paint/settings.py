@@ -138,4 +138,4 @@ AUTH_USER_MODEL = 'Backend_paint_app.CustomUser'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Работает
+# Работает по новому
