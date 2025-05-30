@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 *.sqlite3
 *.env
-misc.xml
+.idea/
 
 # Django
 /static/
