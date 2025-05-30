@@ -22,3 +22,18 @@ class CustomUser(AbstractUser):
         self.telegram_code = code
         self.save()
         return code
+
+class Request(models.Model):
+    request_id = models.CharField(max_length=10, unique=True, blank=True)
+    project = models.CharField(max_length=100)
+    device = models.CharField(max_length=100)
+    quantity = models.PositiveIntegerField()
+    date_received = models.DateField()
+    deadline = models.DateField()
+
+
+    def save(self, *args, **kwargs):
+        if not self.request_id:
+            last = Request.objects.count() + 1
+            self.request_id = f'ПОК{last}'
+        super().save(*args, **kwargs)

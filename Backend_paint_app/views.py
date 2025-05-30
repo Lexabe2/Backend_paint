@@ -8,6 +8,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 import os
+from rest_framework import generics
+from .models import Request
+from .serializers import RequestSerializer
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -89,3 +92,23 @@ def get_user_profile(request):
         "email": user.email,
         "role": user.role
     })
+
+import platform
+import socket
+from django.http import JsonResponse
+
+def server_info(request):
+    info = {
+        'hostname': socket.gethostname(),
+        'ip_address': socket.gethostbyname(socket.gethostname()),
+        'os': platform.system(),
+        'os_version': platform.version(),
+        'python_version': platform.python_version(),
+        'server_software': request.META.get('SERVER_SOFTWARE', 'Unknown'),
+        'user_agent': request.META.get('HTTP_USER_AGENT', 'Unknown'),
+    }
+    return JsonResponse(info)
+
+class RequestCreateAPIView(generics.CreateAPIView):
+    queryset = Request.objects.all()
+    serializer_class = RequestSerializer
