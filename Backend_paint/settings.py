@@ -112,7 +112,7 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
+            'format': '{levelname} {asctime} {name} {module} {message}',
             'style': '{',
         },
         'simple': {
@@ -148,7 +148,6 @@ LOGGING = {
         },
     },
 }
-
 
 AUTH_PASSWORD_VALIDATORS = [
     {

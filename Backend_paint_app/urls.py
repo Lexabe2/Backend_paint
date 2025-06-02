@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import LoginStep1View, VerifyTelegramCodeView, SetTelegramIDView, get_user_profile, RequestCreateAPIView, \
-    server_info
+    server_info, LogView
 from rest_framework_simplejwt.views import TokenVerifyView, TokenRefreshView
 
 urlpatterns = [
@@ -12,4 +12,5 @@ urlpatterns = [
     path('auth/me/', get_user_profile),
     path('requests/', RequestCreateAPIView.as_view(), name='create-request'),
     path('server-info/', server_info, name='server_info'),
+    path('logs/', LogView.as_view(), name='logs'),
 ]
