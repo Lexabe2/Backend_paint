@@ -4,6 +4,7 @@ __pycache__/
 *.sqlite3
 *.env
 .idea/
+logs/
 
 # Django
 /static/
