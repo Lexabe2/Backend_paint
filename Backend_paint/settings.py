@@ -16,7 +16,7 @@ ALLOWED_HOSTS = [
     'api.baopaint.ru',
     '127.0.0.1',
     'localhost',
-    '176.57.213.199',  # 👈 добавь это
+    '5.129.204.218',  # 👈 добавь это
 ]
 
 INSTALLED_APPS = [
