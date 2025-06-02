@@ -136,9 +136,14 @@ LOGGING = {
             'handlers': ['console', 'file'],
             'level': 'INFO',
         },
-        'myapp': {  # пример пользовательского логгера
+        'app': {  # пример пользовательского логгера
             'handlers': ['console', 'file'],
             'level': 'DEBUG',
+            'propagate': False,
+        },
+        'user': {  # пример пользовательского логгера
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
             'propagate': False,
         },
     },
