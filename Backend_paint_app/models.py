@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 import random
 
+
 class CustomUser(AbstractUser):
     ROLE_CHOICES = [
         ('admin', 'Администратор'),
@@ -23,6 +24,7 @@ class CustomUser(AbstractUser):
         self.save()
         return code
 
+
 class Request(models.Model):
     request_id = models.CharField(max_length=10, unique=True, blank=True)
     project = models.CharField(max_length=100)
@@ -30,10 +32,21 @@ class Request(models.Model):
     quantity = models.PositiveIntegerField()
     date_received = models.DateField()
     deadline = models.DateField()
-
+    status = models.TextField(default='Не принят', blank=True, null=True)
 
     def save(self, *args, **kwargs):
         if not self.request_id:
             last = Request.objects.count() + 1
-            self.request_id = f'ПОК{last}'
+            self.request_id = last
         super().save(*args, **kwargs)
+
+    def to_dict(self):
+        return {
+            "request_id": self.request_id,
+            "project": self.project,
+            "device": self.device,
+            "quantity": self.quantity,
+            "date_received": self.date_received.isoformat(),
+            "deadline": self.deadline.isoformat(),
+            "status": self.status or ""
+        }

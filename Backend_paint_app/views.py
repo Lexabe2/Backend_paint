@@ -8,14 +8,14 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 import os
-from rest_framework import generics
 from .models import Request
-from .serializers import RequestSerializer
 import platform
 import socket
 from django.http import JsonResponse
 from .utils.logger import get_logger, log_request_info
 from django.conf import settings
+from datetime import datetime
+import json
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -148,11 +148,6 @@ def server_info(request):
     return JsonResponse(info)
 
 
-class RequestCreateAPIView(generics.CreateAPIView):
-    queryset = Request.objects.all()
-    serializer_class = RequestSerializer
-
-
 class LogView(APIView):
     def get(self, request):
         _ = self
@@ -164,7 +159,87 @@ class LogView(APIView):
             with open(log_file_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()[-100:]  # последние 100 строк
             log_request_info(logger_app, request, 'Пользователь просматривает логи', level='info')
-            print({'logs': lines})
             return Response({'logs': lines})
         except Exception as e:
             return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_request(request):
+    if request.method != 'POST':
+        log_request_info(logger_app, request, 'Неправильный метод запроса', level='error')
+        return JsonResponse({'error': 'Только POST'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+
+        required_fields = ['project', 'device', 'quantity', 'date_received', 'deadline']
+        if not all(field in data for field in required_fields):
+            log_request_info(logger_app, request, 'Не все поля заполнены', level='error')
+            return JsonResponse({'error': 'Не все поля заполнены'}, status=400)
+
+        new_request = Request(
+            project=data['project'],
+            device=data['device'],
+            quantity=int(data['quantity']),
+            date_received=datetime.strptime(data['date_received'], '%Y-%m-%d').date(),
+            deadline=datetime.strptime(data['deadline'], '%Y-%m-%d').date(),
+            status='Создана'
+        )
+        log_request_info(logger_app, request, f'Заявка создана {data}', level='info')
+        new_request.save()
+
+        return JsonResponse({
+            'id': new_request.id,
+            'request_id': new_request.request_id,
+            'project': new_request.project,
+            'device': new_request.device,
+            'quantity': new_request.quantity,
+            'date_received': new_request.date_received,
+            'deadline': new_request.deadline
+        }, status=201)
+
+    except Exception as e:
+        log_request_info(logger_app, request, f'Ошибка {str(e)}', level='error')
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_requests(request):
+    if request.method == "GET":
+        data = []
+        for obj in Request.objects.all().order_by('-id'):
+            data.append({
+                "request_id": obj.request_id,
+                "project": obj.project,
+                "device": obj.device,
+                "quantity": obj.quantity,
+                "date_received": obj.date_received.isoformat(),
+                "deadline": obj.deadline.isoformat(),
+                "status": obj.status,
+            })
+        return JsonResponse(data, safe=False)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_status(request, request_id):
+    if request.method == "PATCH":
+        try:
+            body = json.loads(request.body)
+            status = body.get("status")
+            if status not in ["новый", "в работе", "завершён"]:
+                return JsonResponse("Некорректный статус")
+            req = Request.objects.get(request_id=request_id)
+            req.status = status
+            req.save()
+            return JsonResponse(req.to_dict())
+
+        except Request.DoesNotExist:
+            return JsonResponse({"error": "Заявка не найдена"}, status=404)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    return JsonResponse(["PATCH"])
