@@ -118,6 +118,12 @@ class SetTelegramIDView(APIView):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def check_auth(request):
+    return Response({'status': 'ok'})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_user_profile(request):
     user = request.user
     log_request_info(logger_app, request, 'Отработала get_user_profile', level='info')
@@ -158,6 +164,7 @@ class LogView(APIView):
             with open(log_file_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()[-100:]  # последние 100 строк
             log_request_info(logger_app, request, 'Пользователь просматривает логи', level='info')
+            print({'logs': lines})
             return Response({'logs': lines})
         except Exception as e:
             return Response({'error': str(e)}, status=500)
