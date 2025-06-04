@@ -208,19 +208,25 @@ def create_request(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_requests(request):
-    if request.method == "GET":
-        data = []
-        for obj in Request.objects.all().order_by('-id'):
-            data.append({
-                "request_id": obj.request_id,
-                "project": obj.project,
-                "device": obj.device,
-                "quantity": obj.quantity,
-                "date_received": obj.date_received.isoformat(),
-                "deadline": obj.deadline.isoformat(),
-                "status": obj.status,
-            })
-        return JsonResponse(data, safe=False)
+    status_filter = request.GET.get('status')  # берём параметр ?status=
+    queryset = Request.objects.all().order_by('-id')
+
+    if status_filter:
+        queryset = queryset.filter(status__iexact=status_filter.strip())
+
+    data = [
+        {
+            "request_id": obj.request_id,
+            "project": obj.project,
+            "device": obj.device,
+            "quantity": obj.quantity,
+            "date_received": obj.date_received.isoformat(),
+            "deadline": obj.deadline.isoformat(),
+            "status": obj.status,
+        }
+        for obj in queryset
+    ]
+    return JsonResponse(data, safe=False)
 
 
 @api_view(['PATCH'])
@@ -243,3 +249,40 @@ def update_status(request, request_id):
             return JsonResponse({"error": str(e)}, status=400)
 
     return JsonResponse(["PATCH"])
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def request_list(request):
+    data = []
+    for r in Request.objects.filter(status='Создан'):
+        data.append({
+            'request_id': r.request_id,
+            'project': r.project,
+            'device': r.device,
+            'quantity': r.quantity,
+            'date_received': r.date_received.strftime('%Y-%m-%d'),
+            'deadline': r.deadline.strftime('%Y-%m-%d'),
+            'status': r.status,
+        })
+    return JsonResponse(data, safe=False)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def get_single_request(request, request_id):
+    try:
+        print(request_id)
+        req = Request.objects.get(request_id=request_id)
+        data = {
+            "request_id": req.request_id,
+            "project": req.project,
+            "device": req.device,
+            "quantity": req.quantity,
+            "date_received": req.date_received.isoformat(),
+            "deadline": req.deadline.isoformat(),
+            "status": req.status,
+        }
+        return JsonResponse(data)
+    except Request.DoesNotExist:
+        return JsonResponse({"error": "Заявка не найдена"}, status=404)

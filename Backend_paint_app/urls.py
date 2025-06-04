@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import LoginStep1View, VerifyTelegramCodeView, SetTelegramIDView, get_user_profile, \
-    server_info, LogView, check_auth, create_request, get_requests, update_status
+    server_info, LogView, check_auth, create_request, get_requests, update_status, get_single_request
 from rest_framework_simplejwt.views import TokenVerifyView, TokenRefreshView
 
 urlpatterns = [
@@ -16,4 +16,5 @@ urlpatterns = [
     path('requests/', create_request, name='create-request'), # Добавление заявки
     path('requests-list/', get_requests, name='request-list'), # Возвращает заявки
     path("requests/<int:request_id>/", update_status, name="update_status"), # Изменения статуса заявки
+    path("requests-work/<str:request_id>/", get_single_request), # Приемка
 ]
