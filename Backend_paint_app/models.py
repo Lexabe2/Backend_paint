@@ -40,6 +40,9 @@ class Request(models.Model):
             self.request_id = last
         super().save(*args, **kwargs)
 
+    def __str__(self):
+        return self.request_id
+
     def to_dict(self):
         return {
             "request_id": self.request_id,
@@ -50,3 +53,19 @@ class Request(models.Model):
             "deadline": self.deadline.isoformat(),
             "status": self.status or ""
         }
+
+
+class ATM(models.Model):
+    serial_number = models.CharField(max_length=100, unique=True)
+    accepted_at = models.DateField()
+    model = models.CharField(max_length=100)
+
+    request = models.ForeignKey(
+        Request,
+        to_field='request_id',
+        on_delete=models.CASCADE,
+        related_name='atms'
+    )
+
+    def __str__(self):
+        return f"{self.model} ({self.serial_number})"

@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import CustomUser
+from .models import CustomUser, ATM
 import requests
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes
@@ -16,6 +16,7 @@ from .utils.logger import get_logger, log_request_info
 from django.conf import settings
 from datetime import datetime
 import json
+from django.utils import timezone
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -272,7 +273,6 @@ def request_list(request):
 @permission_classes([IsAuthenticated])
 def get_single_request(request, request_id):
     try:
-        print(request_id)
         req = Request.objects.get(request_id=request_id)
         data = {
             "request_id": req.request_id,
@@ -286,3 +286,68 @@ def get_single_request(request, request_id):
         return JsonResponse(data)
     except Request.DoesNotExist:
         return JsonResponse({"error": "Заявка не найдена"}, status=404)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def register_devices(request, request_id):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+
+        request_id_from_body = data.get("requestId")
+        devices = data.get("devices", [])
+
+        if not request_id_from_body or not devices:
+            return JsonResponse({'error': 'Некорректные данные'}, status=400)
+
+        # Проверяем, что requestId в URL и в теле совпадают
+        if str(request_id_from_body) != str(request_id):
+            return JsonResponse({'error': 'Request ID mismatch'}, status=400)
+
+        # Пытаемся найти заявку
+        try:
+            req = Request.objects.get(request_id=request_id)
+        except Request.DoesNotExist:
+            return JsonResponse({'error': 'Заявка не найдена'}, status=404)
+
+        # Создаём записи для каждого устройства
+        for device in devices:
+            atm_serial = device.get("atm")
+
+            ATM.objects.create(
+                serial_number=atm_serial,
+                accepted_at=timezone.now().date(),  # или date.today() / из body
+                model='неизвестна',  # или передавать из тела
+                request=req
+            )
+            log_request_info(logger_app, request, f'Принял банкомат {atm_serial} заявка {request_id}', level='info')
+        Request.objects.filter(request_id=request_id).update(status="В работе")
+        return JsonResponse({'status': 'ok'})
+
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Ошибка разбора JSON'}, status=400)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def search_device(request):
+    atm_number = request.GET.get("code")
+
+    if not atm_number:
+        return JsonResponse({"error": "Параметр 'code' обязателен"}, status=400)
+
+    try:
+        atm = ATM.objects.get(serial_number=atm_number)
+        return JsonResponse({
+            "serial_number": atm.serial_number,
+            "model": atm.model,
+            "accepted_at": atm.accepted_at.isoformat(),
+        })
+    except ATM.DoesNotExist:
+        return JsonResponse({"error": "Устройство не найдено"}, status=404)

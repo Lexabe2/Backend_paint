@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, Request
+from .models import CustomUser, Request, ATM
+
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
@@ -13,3 +14,4 @@ class CustomUserAdmin(UserAdmin):
         (None, {'fields': ('role', 'telegram_id')}),  # Добавил role
     )
 admin.site.register(Request)
+admin.site.register(ATM)
