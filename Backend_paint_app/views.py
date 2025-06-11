@@ -1,7 +1,8 @@
 from rest_framework.views import APIView
+from rest_framework.decorators import parser_classes
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import CustomUser, ATM
+from .models import CustomUser, ATM, ATMImage
 import requests
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes
@@ -17,6 +18,7 @@ from django.conf import settings
 from datetime import datetime
 import json
 from django.utils import timezone
+from rest_framework.parsers import MultiPartParser, FormParser
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -351,3 +353,65 @@ def search_device(request):
         })
     except ATM.DoesNotExist:
         return JsonResponse({"error": "Устройство не найдено"}, status=404)
+
+
+@api_view(["POST"])
+@parser_classes([MultiPartParser, FormParser])
+def update_atm(request, atm_id):
+    comment = request.data.get("comment", "").strip()
+    model = request.data.get("model", "").strip()
+    photo_type = request.data.get("photo_type", "Приемка")  # по умолчанию "Приемка"
+
+    if not atm_id:
+        return JsonResponse({"error": "Отсутствует идентификатор банкомата"}, status=400)
+
+    try:
+        atm = ATM.objects.get(serial_number=atm_id)
+    except ATM.DoesNotExist:
+        return JsonResponse({"error": f"Банкомат с номером {atm_id} не найден"}, status=404)
+
+    atm.comment = comment
+    atm.photo_type = photo_type
+    atm.model = model
+    atm.save()
+
+    images = request.FILES.getlist("images")
+    if images is not None:
+        for img in images:
+            ATMImage.objects.create(
+                atm=atm,
+                comment=comment,
+                image=img,
+                photo_type=photo_type  # предполагается, что поле есть в ATMImage
+            )
+    ATMImage.objects.create(atm=atm, comment=comment, photo_type=photo_type)
+    log_request_info(logger_app, request, f"Добавил комментарий к {atm_id}", level='info')
+
+    return JsonResponse({"success": True, "uploaded_images": len(images)}, status=200)
+
+
+@api_view(["GET"])
+def get_atm(request, atm_id):
+    try:
+        atm = ATM.objects.get(serial_number=atm_id)
+    except ATM.DoesNotExist:
+        return JsonResponse({"error": "Банкомат не найден"}, status=404)
+
+    data = {
+        "serial_number": atm.serial_number,
+        "model": atm.model,
+        "accepted_at": atm.accepted_at,
+        "request_id": atm.request.request_id,
+        "images": []
+    }
+
+    for image in atm.images.all():
+        image_data = {
+            "id": image.id,
+            "image": request.build_absolute_uri(image.image.url) if image.image else None,
+            "comment": image.comment,
+            "photo_type": image.photo_type,
+        }
+        data["images"].append(image_data)
+
+    return JsonResponse(data, status=200)

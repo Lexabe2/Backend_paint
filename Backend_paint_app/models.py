@@ -69,3 +69,13 @@ class ATM(models.Model):
 
     def __str__(self):
         return f"{self.model} ({self.serial_number})"
+
+
+class ATMImage(models.Model):
+    atm = models.ForeignKey("ATM", related_name="images", on_delete=models.CASCADE)
+    comment = models.TextField(null=True, blank=True)
+    photo_type = models.CharField(max_length=100, blank=True, null=False)
+    image = models.ImageField(upload_to='atm_photos/')
+
+    def __str__(self):
+        return f"Фото для {self.atm.serial_number}"
