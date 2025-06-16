@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import LoginStep1View, VerifyTelegramCodeView, SetTelegramIDView, get_user_profile, \
     server_info, LogView, check_auth, create_request, get_requests, update_status, get_single_request, register_devices, \
-    search_device, update_atm, get_atm
+    search_device, update_atm, get_atm, complaints
 from rest_framework_simplejwt.views import TokenVerifyView, TokenRefreshView
 
 urlpatterns = [
@@ -22,4 +22,5 @@ urlpatterns = [
     path("atm/search/", search_device), # Поиск банкомата
     path('atm/<int:atm_id>/update/', update_atm, name='update_atm'), # Добавления комментария к банкомату через поиск
     path('atm-comment/<int:atm_id>/', get_atm, name='get_atm'), # Просмотр комментариев
+    path('complaints/', complaints, name='complaints'), # Просмотр рекламаций
 ]

@@ -1,4 +1,5 @@
 from rest_framework.views import APIView
+from collections import defaultdict
 from rest_framework.decorators import parser_classes
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -26,6 +27,28 @@ logger_app = get_logger('app')
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 
+def role_chat_id(roles):
+    if isinstance(roles, str):
+        roles = [roles]  # превращаем одиночную строку в список
+
+    chat_ids = CustomUser.objects.filter(role__in=roles) \
+        .exclude(telegram_id__isnull=True) \
+        .exclude(telegram_id='') \
+        .values_list('telegram_id', flat=True)
+    return list(chat_ids)
+
+
+def mess_tel(roles, text):
+    for chat_id in role_chat_id(roles):
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            data={
+                'chat_id': chat_id,
+                'text': text,
+            }
+        )
+
+
 class LoginStep1View(APIView):
     def post(self, request):
         _ = self
@@ -48,7 +71,7 @@ class LoginStep1View(APIView):
                         f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
                         data={
                             'chat_id': user.telegram_id,
-                            'text': f'Ваш код подтверждения:\n`{code}`',
+                            'text': f'Код: `{code}`',
                             'parse_mode': 'Markdown'
                         }
                     )
@@ -192,6 +215,8 @@ def create_request(request):
         )
         log_request_info(logger_app, request, f'Заявка создана {data}', level='info')
         new_request.save()
+        mess_tel('admin',
+                 f'Создана заявка {data["project"]} номер {new_request.id} кол-во устройств {int(data["quantity"])}')
 
         return JsonResponse({
             'id': new_request.id,
@@ -374,7 +399,6 @@ def update_atm(request, atm_id):
     atm.photo_type = photo_type
     atm.model = model
     atm.save()
-
     images = request.FILES.getlist("images")
     if images is not None:
         for img in images:
@@ -386,6 +410,7 @@ def update_atm(request, atm_id):
             )
     ATMImage.objects.create(atm=atm, comment=comment, photo_type=photo_type)
     log_request_info(logger_app, request, f"Добавил комментарий к {atm_id}", level='info')
+    mess_tel('admin', f'Добавлен комментарий к банкомату {atm_id} "{comment}"')
 
     return JsonResponse({"success": True, "uploaded_images": len(images)}, status=200)
 
@@ -415,3 +440,16 @@ def get_atm(request, atm_id):
         data["images"].append(image_data)
 
     return JsonResponse(data, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def complaints(request):
+    grouped_serials = defaultdict(list)
+
+    atms = ATM.objects.filter(request__status="Отправлен").select_related('request')
+
+    for atm in atms:
+        grouped_serials[atm.request.request_id].append(atm.serial_number)
+
+    return JsonResponse(grouped_serials, safe=False)
