@@ -75,6 +75,7 @@ class LoginStep1View(APIView):
                             'parse_mode': 'Markdown'
                         }
                     )
+                    # ntnc
                     response.raise_for_status()
                     log_request_info(logger, request, 'Код отправлен в Telegram', level='info')
                 except requests.RequestException as e:
