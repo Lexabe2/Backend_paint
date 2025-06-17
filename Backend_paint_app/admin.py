@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, Request, ATM, ATMImage
+from .models import CustomUser, Request, ATM, ATMImage, ReclamationPhoto, Reclamation
 
 
 @admin.register(CustomUser)
@@ -16,3 +16,12 @@ class CustomUserAdmin(UserAdmin):
 admin.site.register(Request)
 admin.site.register(ATM)
 admin.site.register(ATMImage)
+
+class ReclamationPhotoInline(admin.TabularInline):
+    model = ReclamationPhoto
+    extra = 1
+
+@admin.register(Reclamation)
+class ReclamationAdmin(admin.ModelAdmin):
+    list_display = ('id', 'serial_number', 'created_at')
+    inlines = [ReclamationPhotoInline]

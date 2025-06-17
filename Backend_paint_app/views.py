@@ -3,7 +3,7 @@ from collections import defaultdict
 from rest_framework.decorators import parser_classes
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import CustomUser, ATM, ATMImage
+from .models import CustomUser, ATM, ATMImage, Reclamation, ReclamationPhoto
 import requests
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes
@@ -446,11 +446,108 @@ def get_atm(request, atm_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def complaints(request):
-    grouped_serials = defaultdict(list)
+    reclamations = Reclamation.objects.prefetch_related("photos").all()
 
-    atms = ATM.objects.filter(request__status="Отправлен").select_related('request')
+    result = []
+    for rec in reclamations:
+        result.append({
+            "id": rec.id,
+            "serial_number": rec.serial_number,
+            "due_date": rec.due_date,
+            "created_at": rec.created_at,
+            "status": rec.get_status_display(),
+            "remarks": rec.remarks,
+            "comment_remarks": rec.comment_remarks,
+            "remarks_corrections": rec.remarks_corrections,
+            "is_overdue": rec.is_overdue,
+            "photos": [request.build_absolute_uri(photo.image.url) for photo in rec.photos.all()]
+        })
 
-    for atm in atms:
-        grouped_serials[atm.request.request_id].append(atm.serial_number)
+    return JsonResponse(result, safe=False)
 
-    return JsonResponse(grouped_serials, safe=False)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_reclamation(request):
+    serial_number = request.POST.get("serial_number")
+    due_date = request.POST.get("due_date")
+    remarks = request.POST.get("remarks")
+
+    if not serial_number:
+        return Response({"error": "Серийный номер обязателен"}, status=400)
+
+    # Создаём рекламацию
+    reclamation = Reclamation.objects.create(
+        serial_number=serial_number,
+        due_date=due_date,
+        remarks=remarks,
+        created_by=request.user
+    )
+
+    # Обрабатываем все переданные фотографии
+    for file in request.FILES.getlist("photos"):
+        ReclamationPhoto.objects.create(
+            reclamation=reclamation,
+            image=file
+        )
+    mess_tel(['admin', 'admin_paint'], f'Создана рекламация к банкомату {serial_number} замечания {remarks}')
+    return Response({
+        "message": "Рекламация успешно создана",
+        "id": reclamation.id,
+        "serial_number": reclamation.serial_number,
+        "photos": [photo.image.url for photo in reclamation.photos.all()]
+    })
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_complaint_comment(request, complaint_id):
+    try:
+        body = request.data  # DRF сам разберёт JSON
+
+        complaint = Reclamation.objects.get(id=complaint_id)
+
+        # Обновление полей, если переданы
+        if "comment_remarks" in body:
+            comment = body["comment_remarks"]
+            complaint.comment_remarks = comment
+            complaint.status = 'in_progress'
+            complaint.save()
+            mess_tel(
+                ['admin', 'admin_pp'],
+                f'Взят в работу банкомат {complaint.serial_number} комментарий: {comment}'
+            )
+            return JsonResponse({"status": "success", "message": "Комментарий сохранён"})
+
+        elif "comment_good" in body:
+            comment = body["comment_good"]
+            complaint.remarks_corrections = comment  # убедись, что такое поле есть в модели!
+            complaint.status = 'in_check'
+            complaint.save()
+            mess_tel(
+                ['admin', 'admin_paint'],
+                f'Рекламация ожидает проверки {complaint.serial_number} комментарий: {comment}'
+            )
+            return JsonResponse({"status": "success", "message": "Рекламация закрыта"})
+
+
+        elif body.get("rejected") is True:
+            complaint.status = 'pending'
+            complaint.save()
+            mess_tel(['admin', 'admin_pp'], f'Рекламация отклонена: {complaint.serial_number}')
+            return JsonResponse({"status": "success", "message": "Отклонено"})
+
+        elif body.get("approved") is True:
+            complaint.status = 'resolved'
+            complaint.save()
+            mess_tel(['admin', 'admin_pp'], f'Рекламация принята: {complaint.serial_number}')
+            return JsonResponse({"status": "success", "message": "Отклонено"})
+
+        else:
+            return JsonResponse({"status": "error", "message": "Комментарий не передан"}, status=400)
+
+    except Reclamation.DoesNotExist:
+        return JsonResponse({"status": "error", "message": "Рекламация не найдена"}, status=404)
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
