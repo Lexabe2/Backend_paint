@@ -6,7 +6,7 @@ from django.utils.timezone import now
 class Command(BaseCommand):
     help = 'Ежедневная задача'
     def handle(self, *args, **kwargs):
-        reclamations = Reclamation.objects.all()
+        reclamations = Reclamation.objects.filter(status__in=['in_progress', 'pending'])
 
         for rec in reclamations:
             if not rec.is_overdue:

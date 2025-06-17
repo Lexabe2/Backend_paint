@@ -459,7 +459,7 @@ def complaints(request):
             "remarks": rec.remarks,
             "comment_remarks": rec.comment_remarks,
             "remarks_corrections": rec.remarks_corrections,
-            "is_overdue": rec.is_overdue,
+            "is_overdue": rec.is_overdue if rec.status in ["pending", "in_progress", "in_check"] else False,
             "photos": [request.build_absolute_uri(photo.image.url) for photo in rec.photos.all()]
         })
 
