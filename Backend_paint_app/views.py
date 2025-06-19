@@ -265,7 +265,7 @@ def update_status(request, request_id):
         try:
             body = json.loads(request.body)
             status = body.get("status")
-            if status not in ["новый", "в работе", "завершён"]:
+            if status not in ["Готова", "Отгружена"]:
                 return JsonResponse("Некорректный статус")
             req = Request.objects.get(request_id=request_id)
             req.status = status

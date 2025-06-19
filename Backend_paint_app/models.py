@@ -35,7 +35,7 @@ class Request(models.Model):
     quantity = models.PositiveIntegerField()
     date_received = models.DateField()
     deadline = models.DateField()
-    status = models.TextField(default='Не принят', blank=True, null=True)
+    status = models.TextField(default='Создана', blank=True, null=True)
 
     class Meta:
         verbose_name = "Заявки"
@@ -86,7 +86,7 @@ class ATMImage(models.Model):
     atm = models.ForeignKey("ATM", related_name="images", on_delete=models.CASCADE)
     comment = models.TextField(null=True, blank=True)
     photo_type = models.CharField(max_length=100, blank=True, null=False)
-    image = models.ImageField(upload_to='atm_photos/')
+    image = models.ImageField(upload_to='atm_photos/', null=True, blank=True)
 
     class Meta:
         verbose_name = "Фото неисправностей"
@@ -95,9 +95,11 @@ class ATMImage(models.Model):
     def __str__(self):
         return f"Фото для {self.atm.serial_number}"
 
+
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
+
 
 class Reclamation(models.Model):
     STATUS_CHOICES = [
