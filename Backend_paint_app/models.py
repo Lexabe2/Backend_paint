@@ -182,6 +182,21 @@ class Reclamation(models.Model):
     def is_overdue(self):
         return self.due_date and self.due_date < timezone.now().date()
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "serialNumber": self.serial_number,
+            "dueDate": self.due_date.isoformat() if self.due_date else None,
+            "createdAt": self.created_at.isoformat(),
+            "status": self.get_status_display(),  # "В ожидании"
+            "remarks": self.remarks,
+            "commentRemarks": self.comment_remarks,
+            "remarksCorrections": self.remarks_corrections,
+            "createdBy": self.created_by.username if self.created_by else None,
+            "updatedBy": self.updated_by.username if self.updated_by else None,
+            "isOverdue": self.is_overdue,
+        }
+
 
 class ReclamationPhoto(models.Model):
     reclamation = models.ForeignKey(Reclamation, related_name="photos", on_delete=models.CASCADE)

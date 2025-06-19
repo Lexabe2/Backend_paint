@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import LoginStep1View, VerifyTelegramCodeView, SetTelegramIDView, get_user_profile, \
     server_info, LogView, check_auth, create_request, get_requests, update_status, get_single_request, register_devices, \
-    search_device, update_atm, get_atm, complaints, create_reclamation, update_complaint_comment
+    search_device, update_atm, get_atm, complaints, create_reclamation, update_complaint_comment, dashboard
 from rest_framework_simplejwt.views import TokenVerifyView, TokenRefreshView
 
 urlpatterns = [
@@ -14,6 +14,7 @@ urlpatterns = [
     path('auth/me/', get_user_profile), # Получение информации о пользователе
     path('server-info/', server_info, name='server_info'), # Получение информации о сервере
     path('logs/', LogView.as_view(), name='logs'), # Получение логов
+    path('dashboard/', dashboard, name='dashboard'), # Получение информации для главной станицы
     path('requests/', create_request, name='create-request'), # Добавление заявки
     path('requests-list/', get_requests, name='request-list'), # Возвращает заявки
     path("requests/<int:request_id>/", update_status, name="update_status"), # Изменения статуса заявки

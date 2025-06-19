@@ -175,6 +175,26 @@ def server_info(request):
     return JsonResponse(info)
 
 
+
+def dashboard(request):
+    # Заявки
+    requests_data = Request.objects.all()
+    requests_serialized = [r.to_dict() for r in requests_data]
+
+    # Рекламации по статусам
+    reclamations_grouped = {}
+    for status_key, _ in Reclamation.STATUS_CHOICES:
+        reclamations_grouped[status_key] = [
+            r.to_dict() for r in Reclamation.objects.filter(status=status_key)
+        ]
+
+    # Объединяем всё в один JSON-ответ
+    return JsonResponse({
+        "requests": requests_serialized,
+        "reclamations": reclamations_grouped
+    }, safe=False)
+
+
 class LogView(APIView):
     def get(self, request):
         _ = self
