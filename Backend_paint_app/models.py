@@ -66,20 +66,36 @@ class ATM(models.Model):
     serial_number = models.CharField(max_length=100, unique=True)
     accepted_at = models.DateField()
     model = models.CharField(max_length=100)
-
+    pallet = models.CharField(max_length=100, null=True, blank=True)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     request = models.ForeignKey(
         Request,
         to_field='request_id',
         on_delete=models.CASCADE,
-        related_name='atms'
+        related_name='atms',
+        null=True,
+        blank=True,
     )
 
     class Meta:
-        verbose_name = "Банкоматы"
+        verbose_name = "Банкомат"
         verbose_name_plural = "Банкоматы"
+
+    def save(self, *args, **kwargs):
+        if self.pallet and not self.pallet.startswith("PP"):
+            self.pallet = f"PP{self.pallet}"
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.model} ({self.serial_number})"
+
+
+class ModelAtm(models.Model):
+    model = models.CharField(max_length=100)
+
+    class Meta:
+        verbose_name = "Модель"
+        verbose_name_plural = "Модели"
 
 
 class ATMImage(models.Model):

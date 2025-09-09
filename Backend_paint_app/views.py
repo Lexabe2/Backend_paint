@@ -1,9 +1,9 @@
 from rest_framework.views import APIView
-from collections import defaultdict
+from django.utils.dateparse import parse_date
 from rest_framework.decorators import parser_classes
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import CustomUser, ATM, ATMImage, Reclamation, ReclamationPhoto
+from .models import CustomUser, ATM, ATMImage, Reclamation, ReclamationPhoto, ModelAtm
 import requests
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes
@@ -20,6 +20,8 @@ from datetime import datetime
 import json
 from django.utils import timezone
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.db.models.functions import Substr, Cast
+from django.db.models import IntegerField, Max
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -173,7 +175,6 @@ def server_info(request):
     }
     log_request_info(logger_app, request, 'Отработала server_info', level='info')
     return JsonResponse(info)
-
 
 
 def dashboard(request):
@@ -571,3 +572,78 @@ def update_complaint_comment(request, complaint_id):
 
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+@api_view(["POST", "GET"])
+@permission_classes([IsAuthenticated])
+def atm_raw_create(request):
+    if request.method == "GET":
+        last_num = (
+            ATM.objects
+            .filter(pallet__startswith="PP")
+            .annotate(pallet_num=Cast(Substr("pallet", 3), IntegerField()))
+            .aggregate(max_num=Max("pallet_num"))
+        )["max_num"]
+        models = ModelAtm.objects.all()
+        model_list = [m.model for m in models]
+        print(model_list)
+        return JsonResponse({"pallet": last_num + 1, "model":model_list}, status=200)
+
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return JsonResponse({"detail": "Invalid JSON"}, status=400)
+
+        serial = data.get("serial_number")
+        model = data.get("model")
+        accepted_at = data.get("accepted_at")
+        pallet = data.get("pallet")
+        user = request.user
+
+        errors = {}
+        if not serial:
+            errors["serial_number"] = "Обязательное поле."
+        if not model:
+            errors["model"] = "Обязательное поле."
+        if not accepted_at:
+            errors["accepted_at"] = "Обязательное поле."
+        else:
+            parsed = parse_date(accepted_at)
+            if parsed is None:
+                errors["accepted_at"] = "Неверный формат даты (ожидается YYYY-MM-DD)."
+        if not pallet:
+            errors["pallet"] = "Обязательное поле."
+
+        if errors:
+            return JsonResponse({"errors": errors}, status=400)
+
+        if ATM.objects.filter(serial_number=serial).exists():
+            return JsonResponse({"detail": "ATM с таким serial_number уже существует."}, status=400)
+
+        # обработка request_id
+        request_obj = None
+        request_id = data.get("request_id")
+        if request_id:
+            try:
+                request_obj = Request.objects.get(request_id=request_id)
+            except Request.DoesNotExist:
+                return JsonResponse({"detail": "Указанный request_id не найден."}, status=400)
+
+        atm = ATM.objects.create(
+            serial_number=serial,
+            model=model,
+            pallet=f"PP{pallet}",
+            accepted_at=parse_date(accepted_at),
+            request=request_obj,
+            user=user
+        )
+
+        return JsonResponse({
+            "id": atm.id,
+            "serial_number": atm.serial_number,
+            "model": atm.model,
+            "accepted_at": atm.accepted_at.isoformat(),
+            "pallet": atm.pallet,
+        }, status=201)
+    return None
