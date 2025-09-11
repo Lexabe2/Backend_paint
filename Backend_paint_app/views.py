@@ -264,11 +264,15 @@ def create_request(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_requests(request):
+    request_id = request.GET.get('id')
     status_filter = request.GET.get('status')  # берём параметр ?status=
+
     queryset = Request.objects.all().order_by('-id')
 
     if status_filter:
         queryset = queryset.filter(status__iexact=status_filter.strip())
+    elif request_id:
+        queryset = queryset.filter(request_id=request_id)
 
     data = [
         {
@@ -698,3 +702,61 @@ def warehouse_atms(request):
         "project_data": project_data_list,
         "last_request": int(last_request_data) + 1,
     })
+
+
+@api_view(["POST", "GET", "DELETE"])
+@permission_classes([IsAuthenticated])
+def atm_for_paint(request):
+    if request.method == "GET":
+        request_id = request.GET.get("request_id")
+        atms = ATM.objects.filter(request_id=request_id)
+        # Преобразуем QuerySet в список словарей
+        data = [
+            {
+                "id": atm.id,
+                "model": atm.model,
+                "serial_number": atm.serial_number,
+                "pallet": atm.pallet,
+            }
+            for atm in atms
+        ]
+        return JsonResponse({"atms": data}, safe=False, json_dumps_params={'ensure_ascii': False})
+
+    if request.method == "POST":
+        sn = request.data.get("sn")
+        request_id = request.data.get("request_id")
+        if not sn or not request_id:
+            return JsonResponse({"error": "Не передан sn или request_id"}, status=400)
+        try:
+            atm = ATM.objects.get(serial_number=sn)
+        except ATM.DoesNotExist:
+            return JsonResponse({"error": f"Банкомат с SN {sn} не найден"}, status=404)
+        try:
+            req = Request.objects.get(request_id=request_id)
+        except Request.DoesNotExist:
+            return JsonResponse({"error": f"Заявка с id {request_id} не найдена"}, status=404)
+        atm.request = req
+        atm.save()
+        count_atm_req = Request.objects.get(request_id=request_id).quantity
+        count_atm = ATM.objects.filter(request=request_id).count()
+        if count_atm == count_atm_req:
+            Request.objects.filter(request_id=request_id).update(status="Готова к передачи в покраску")
+            mess_tel(['admin', 'admin_paint'],
+                     f'Заявка {request_id} готова к передачи в покраску')
+        return JsonResponse({"message": "POST успешно"}, status=201)
+    if request.method == "DELETE":
+        serial_number = request.data.get("serial_number")
+        if not serial_number:
+            return JsonResponse({"error": "Не передан atm_id"}, status=400)
+
+        try:
+            atm = ATM.objects.get(serial_number=serial_number)
+        except ATM.DoesNotExist:
+            return JsonResponse({"error": f"Банкомат с id {serial_number} не найден"}, status=404)
+
+        # Отвязать банкомат от заявки
+        atm.request = None
+        atm.save()
+
+        return JsonResponse({"message": "Банкомат удалён из заявки"}, status=200)
+    return None

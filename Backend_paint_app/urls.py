@@ -2,7 +2,7 @@ from django.urls import path
 from .views import LoginStep1View, VerifyTelegramCodeView, SetTelegramIDView, get_user_profile, \
     server_info, LogView, check_auth, create_request, get_requests, update_status, get_single_request, register_devices, \
     search_device, update_atm, get_atm, complaints, create_reclamation, update_complaint_comment, dashboard, \
-    atm_raw_create, warehouse_atms
+    atm_raw_create, warehouse_atms, atm_for_paint
 from rest_framework_simplejwt.views import TokenVerifyView, TokenRefreshView
 
 urlpatterns = [
@@ -29,4 +29,5 @@ urlpatterns = [
     path('complaints/<int:complaint_id>/', update_complaint_comment, name='update_complaint_comment'),
     path("atms/raw_create/", atm_raw_create, name="atm-raw-create"),
     path('atms/warehouse/', warehouse_atms, name='warehouse_atms'),
+    path('atm_for_paint/', atm_for_paint, name='atm_for_paint'),
 ]
