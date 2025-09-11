@@ -3,7 +3,7 @@ from django.utils.dateparse import parse_date
 from rest_framework.decorators import parser_classes
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import CustomUser, ATM, ATMImage, Reclamation, ReclamationPhoto, ModelAtm
+from .models import CustomUser, ATM, ATMImage, Reclamation, ReclamationPhoto, ModelAtm, ProjectData
 import requests
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes
@@ -21,7 +21,8 @@ import json
 from django.utils import timezone
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.db.models.functions import Substr, Cast
-from django.db.models import IntegerField, Max
+from django.db.models import IntegerField, Max, Sum
+from datetime import date
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -222,7 +223,7 @@ def create_request(request):
     try:
         data = json.loads(request.body)
 
-        required_fields = ['project', 'device', 'quantity', 'date_received', 'deadline']
+        required_fields = ['project', 'device', 'quantity']
         if not all(field in data for field in required_fields):
             log_request_info(logger_app, request, 'Не все поля заполнены', level='error')
             return JsonResponse({'error': 'Не все поля заполнены'}, status=400)
@@ -231,14 +232,18 @@ def create_request(request):
             project=data['project'],
             device=data['device'],
             quantity=int(data['quantity']),
-            date_received=datetime.strptime(data['date_received'], '%Y-%m-%d').date(),
-            deadline=datetime.strptime(data['deadline'], '%Y-%m-%d').date(),
-            status='Создана'
+            date_received=date.today(),
+            deadline=(
+                datetime.strptime(data['deadline'], '%Y-%m-%d').date()
+                if data.get('deadline')
+                else None
+            ),
+            status=data.get('status') or 'Создана'
         )
         log_request_info(logger_app, request, f'Заявка создана {data}', level='info')
         new_request.save()
         mess_tel('admin',
-                 f'Создана заявка {data["project"]} номер {new_request.id} кол-во устройств {int(data["quantity"])}')
+                 f'Создана заявка {data["project"]} номер {new_request.request_id} кол-во устройств {int(data["quantity"])}')
 
         return JsonResponse({
             'id': new_request.id,
@@ -271,7 +276,7 @@ def get_requests(request):
             "device": obj.device,
             "quantity": obj.quantity,
             "date_received": obj.date_received.isoformat(),
-            "deadline": obj.deadline.isoformat(),
+            "deadline": obj.deadline.isoformat() if obj.deadline else None,
             "status": obj.status,
         }
         for obj in queryset
@@ -286,11 +291,11 @@ def update_status(request, request_id):
         try:
             body = json.loads(request.body)
             status = body.get("status")
-            if status not in ["Готова", "Отгружена"]:
-                return JsonResponse("Некорректный статус")
             req = Request.objects.get(request_id=request_id)
             req.status = status
             req.save()
+            mess_tel('admin',
+                     f'Заявка {request_id} принята в работу принял {request.user}')
             return JsonResponse(req.to_dict())
 
         except Request.DoesNotExist:
@@ -299,23 +304,6 @@ def update_status(request, request_id):
             return JsonResponse({"error": str(e)}, status=400)
 
     return JsonResponse(["PATCH"])
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def request_list(request):
-    data = []
-    for r in Request.objects.filter(status='Создан'):
-        data.append({
-            'request_id': r.request_id,
-            'project': r.project,
-            'device': r.device,
-            'quantity': r.quantity,
-            'date_received': r.date_received.strftime('%Y-%m-%d'),
-            'deadline': r.deadline.strftime('%Y-%m-%d'),
-            'status': r.status,
-        })
-    return JsonResponse(data, safe=False)
 
 
 @api_view(["GET", "POST"])
@@ -328,9 +316,9 @@ def get_single_request(request, request_id):
             "project": req.project,
             "device": req.device,
             "quantity": req.quantity,
-            "date_received": req.date_received.isoformat(),
-            "deadline": req.deadline.isoformat(),
-            "status": req.status,
+            "date_received": req.date_received.isoformat() if req.date_received else None,
+            "deadline": req.deadline.isoformat() if req.deadline else None,
+            "status": req.status
         }
         return JsonResponse(data)
     except Request.DoesNotExist:
@@ -586,8 +574,7 @@ def atm_raw_create(request):
         )["max_num"]
         models = ModelAtm.objects.all()
         model_list = [m.model for m in models]
-        print(model_list)
-        return JsonResponse({"pallet": last_num + 1, "model":model_list}, status=200)
+        return JsonResponse({"pallet": last_num + 1, "model": model_list}, status=200)
 
     if request.method == "POST":
         try:
@@ -599,6 +586,7 @@ def atm_raw_create(request):
         model = data.get("model")
         accepted_at = data.get("accepted_at")
         pallet = data.get("pallet")
+        status = 'Принят на склад'
         user = request.user
 
         errors = {}
@@ -636,6 +624,7 @@ def atm_raw_create(request):
             pallet=f"PP{pallet}",
             accepted_at=parse_date(accepted_at),
             request=request_obj,
+            status=status,
             user=user
         )
 
@@ -647,3 +636,48 @@ def atm_raw_create(request):
             "pallet": atm.pallet,
         }, status=201)
     return None
+
+
+@api_view(["POST", "GET"])
+@permission_classes([IsAuthenticated])
+def warehouse_atms(request):
+    # Банкоматы со статусом "Принят на склад"
+    atms = ATM.objects.filter(status="Принят на склад")
+    reserve = (
+                  Request.objects
+                  .filter(status="На согласование(покрасочная)")
+                  .aggregate(total=Sum("quantity"))
+              )["total"] or 0
+
+    # Последняя заявка
+    last_request = Request.objects.order_by('-request_id').first()
+    last_request_data = last_request.request_id if last_request else 0
+
+    # Проекты
+    project_data_list = [
+        {
+            'project': i.project,
+            'deadlines': i.deadlines,
+            'comments': i.comments
+        }
+        for i in ProjectData.objects.all()
+    ]
+
+    # Банкоматы
+    atms_data = [
+        {
+            "id": atm.id,
+            "serial_number": atm.serial_number,
+            "model": atm.model,
+            "pallet": atm.pallet,
+            "status": atm.status,
+        }
+        for atm in atms
+    ]
+
+    return JsonResponse({
+        "count": atms.count() - reserve,
+        "atms": atms_data,
+        "project_data": project_data_list,
+        "last_request": int(last_request_data) + 1,
+    })

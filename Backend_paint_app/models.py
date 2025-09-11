@@ -34,7 +34,7 @@ class Request(models.Model):
     device = models.CharField(max_length=100)
     quantity = models.PositiveIntegerField()
     date_received = models.DateField()
-    deadline = models.DateField()
+    deadline = models.DateField(null=True, blank=True)
     status = models.TextField(default='Создана', blank=True, null=True)
 
     class Meta:
@@ -56,9 +56,9 @@ class Request(models.Model):
             "project": self.project,
             "device": self.device,
             "quantity": self.quantity,
-            "date_received": self.date_received.isoformat(),
-            "deadline": self.deadline.isoformat(),
-            "status": self.status or ""
+            "date_received": self.date_received.isoformat() if self.date_received else None,
+            "deadline": self.deadline.isoformat() if self.deadline else None,
+            "status": self.status,
         }
 
 
@@ -67,6 +67,7 @@ class ATM(models.Model):
     accepted_at = models.DateField()
     model = models.CharField(max_length=100)
     pallet = models.CharField(max_length=100, null=True, blank=True)
+    status = models.CharField(max_length=100, null=True, blank=True)
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     request = models.ForeignKey(
         Request,
@@ -87,7 +88,7 @@ class ATM(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.model} ({self.serial_number})"
+        return f"{self.serial_number} {self.model} {self.status} {self.pallet} {self.user}"
 
 
 class ModelAtm(models.Model):
@@ -221,3 +222,16 @@ class ReclamationPhoto(models.Model):
 
     def __str__(self):
         return f"Фото для рекламации №{self.reclamation.id}"
+
+
+class ProjectData(models.Model):
+    project = models.CharField(max_length=10, null=False, unique=True)
+    deadlines = models.IntegerField(null=False, blank=True)
+    comments = models.TextField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Данные по проекту"
+        verbose_name_plural = "Данные по проектам"
+
+    def __str__(self):
+        return f'{self.project} {self.deadlines} {str(self.comments)}'
