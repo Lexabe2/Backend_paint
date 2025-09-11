@@ -23,6 +23,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.db.models.functions import Substr, Cast
 from django.db.models import IntegerField, Max, Sum
 from datetime import date
+import traceback
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -566,16 +567,32 @@ def update_complaint_comment(request, complaint_id):
 @permission_classes([IsAuthenticated])
 def atm_raw_create(request):
     if request.method == "GET":
-        last_num = (
-            ATM.objects
-            .filter(pallet__startswith="PP")
-            .annotate(pallet_num=Cast(Substr("pallet", 3), IntegerField()))
-            .aggregate(max_num=Max("pallet_num"))
-        )["max_num"]
-        models = ModelAtm.objects.all()
-        model_list = [m.model for m in models]
-        return JsonResponse({"pallet": last_num + 1, "model": model_list}, status=200)
+        try:
+            last_num = (
+                           ATM.objects
+                           .filter(pallet__startswith="PP")
+                           .annotate(pallet_num=Cast(Substr("pallet", 3), IntegerField()))
+                           .aggregate(max_num=Max("pallet_num"))
+                       )["max_num"] or 0  # если None, то ставим 0
 
+            models = ModelAtm.objects.all()
+            model_list = [m.model for m in models]
+
+            return JsonResponse(
+                {"pallet": last_num + 1, "model": model_list},
+                status=200,
+                json_dumps_params={"ensure_ascii": False},
+            )
+
+        except Exception as e:
+            error_text = f"Ошибка в atm_raw_create: {e}"
+            logger.error(error_text)
+            logger_app.error(error_text)
+            traceback_str = traceback.format_exc()
+            logger.error(traceback_str)
+            logger_app.error(traceback_str)
+
+            return JsonResponse({"error": str(e)}, status=500)
     if request.method == "POST":
         try:
             data = json.loads(request.body.decode("utf-8"))
