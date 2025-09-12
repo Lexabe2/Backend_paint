@@ -8,7 +8,7 @@ class CustomUser(AbstractUser):
     ROLE_CHOICES = [
         ('admin', 'Администратор'),
         ('admin_paint', 'Админ_пок'),
-        ('admin_pp', 'Админ_пп'),
+        ('storekeeper', 'Кладовщик'),
         ('moderator', 'Модератор'),
         ('user', 'Пользователь'),
     ]
