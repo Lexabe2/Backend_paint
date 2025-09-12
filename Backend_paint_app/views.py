@@ -358,15 +358,11 @@ def register_devices(request, request_id):
         # Создаём записи для каждого устройства
         for device in devices:
             atm_serial = device.get("atm")
-
-            ATM.objects.create(
-                serial_number=atm_serial,
-                accepted_at=timezone.now().date(),  # или date.today() / из body
-                model='неизвестна',  # или передавать из тела
-                request=req
-            )
+            if not ATM.objects.filter(serial_number=atm_serial).exists():
+                return JsonResponse({'error': f'Серийный номер {atm_serial} не найден'}, status=404)
+            ATM.objects.filter(serial_number=atm_serial).update(status='Принят в покраску')
             log_request_info(logger_app, request, f'Принял банкомат {atm_serial} заявка {request_id}', level='info')
-        Request.objects.filter(request_id=request_id).update(status="В работе")
+        Request.objects.filter(request_id=request_id).update(status="В покраске")
         return JsonResponse({'status': 'ok'})
 
     except json.JSONDecodeError:
@@ -736,6 +732,7 @@ def atm_for_paint(request):
         except Request.DoesNotExist:
             return JsonResponse({"error": f"Заявка с id {request_id} не найдена"}, status=404)
         atm.request = req
+        atm.status = 'Готов к передаче в покраску'
         atm.save()
         count_atm_req = Request.objects.get(request_id=request_id).quantity
         count_atm = ATM.objects.filter(request=request_id).count()
@@ -745,10 +742,14 @@ def atm_for_paint(request):
                      f'Заявка {request_id} готова к передачи в покраску')
         return JsonResponse({"message": "POST успешно"}, status=201)
     if request.method == "DELETE":
+        request_id = request.data.get("request_id")
         serial_number = request.data.get("serial_number")
+        count_atm_req = Request.objects.get(request_id=request_id).quantity
+        count_atm = ATM.objects.filter(request=request_id).count()
+        if count_atm == count_atm_req:
+            Request.objects.filter(request_id=request_id).update(status="Заявка принята(покрасочная)")
         if not serial_number:
             return JsonResponse({"error": "Не передан atm_id"}, status=400)
-
         try:
             atm = ATM.objects.get(serial_number=serial_number)
         except ATM.DoesNotExist:
