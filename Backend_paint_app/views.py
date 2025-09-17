@@ -3,7 +3,8 @@ from django.utils.dateparse import parse_date
 from rest_framework.decorators import parser_classes
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import CustomUser, ATM, ATMImage, Reclamation, ReclamationPhoto, ModelAtm, ProjectData
+from .models import CustomUser, ATM, ATMImage, Reclamation, ReclamationPhoto, ModelAtm, ProjectData, StatusReq, \
+    StatusATM, Work, ATMWorkStatus, Stage
 import requests
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes
@@ -18,12 +19,13 @@ from .utils.logger import get_logger, log_request_info
 from django.conf import settings
 from datetime import datetime
 import json
-from django.utils import timezone
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.db.models.functions import Substr, Cast
 from django.db.models import IntegerField, Max, Sum
 from datetime import date
 import traceback
+from django.db.models import Count
+from django.utils import timezone
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -179,23 +181,27 @@ def server_info(request):
     return JsonResponse(info)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def dashboard(request):
-    # Заявки
-    requests_data = Request.objects.all()
-    requests_serialized = [r.to_dict() for r in requests_data]
+    source = request.GET.get("source", "").lower()  # делаем параметр нечувствительным к регистру
 
-    # Рекламации по статусам
-    reclamations_grouped = {}
-    for status_key, _ in Reclamation.STATUS_CHOICES:
-        reclamations_grouped[status_key] = [
-            r.to_dict() for r in Reclamation.objects.filter(status=status_key)
-        ]
+    if source == "warehouse":
+        # Считаем заявки по статусам
+        data_req = list(Request.objects.exclude(status='Закрыта').values("status").annotate(count=Count("id")))
+        atm_counts = list(ATM.objects.values('status').annotate(count=Count('id')))
+        print(atm_counts)
+        return JsonResponse({"data": data_req, 'atm_counts': atm_counts})
 
-    # Объединяем всё в один JSON-ответ
-    return JsonResponse({
-        "requests": requests_serialized,
-        "reclamations": reclamations_grouped
-    }, safe=False)
+    elif source == "paint":
+        # Данные для покрасочной
+        return JsonResponse({
+            "message": "Информация для покрасочной",
+            "source": source,
+        })
+
+    # По умолчанию пустой объект
+    return JsonResponse({"message": "Неизвестный источник"})
 
 
 class LogView(APIView):
@@ -245,6 +251,8 @@ def create_request(request):
         new_request.save()
         mess_tel('admin',
                  f'Создана заявка {data["project"]} номер {new_request.request_id} кол-во устройств {int(data["quantity"])}')
+        req = Request.objects.get(request_id=new_request.request_id)
+        StatusReq.objects.create(status='Заявка создана', date_change=date.today(), user=request.user, request=req)
 
         return JsonResponse({
             'id': new_request.id,
@@ -301,6 +309,9 @@ def update_status(request, request_id):
             req.save()
             mess_tel('admin',
                      f'Заявка {request_id} принята в работу принял {request.user}')
+            req = Request.objects.get(request_id=request_id)
+            StatusReq.objects.create(status='Заявка принята покрасочной', date_change=date.today(), user=request.user,
+                                     request=req)
             return JsonResponse(req.to_dict())
 
         except Request.DoesNotExist:
@@ -361,8 +372,12 @@ def register_devices(request, request_id):
             if not ATM.objects.filter(serial_number=atm_serial).exists():
                 return JsonResponse({'error': f'Серийный номер {atm_serial} не найден'}, status=404)
             ATM.objects.filter(serial_number=atm_serial).update(status='Принят в покраску')
+            atm = ATM.objects.get(serial_number=atm_serial)
+            StatusATM.objects.create(status='Принят в покраску', date_change=date.today(), user=request.user, sn=atm)
             log_request_info(logger_app, request, f'Принял банкомат {atm_serial} заявка {request_id}', level='info')
         Request.objects.filter(request_id=request_id).update(status="В покраске")
+        req = Request.objects.get(request_id=request_id)
+        StatusReq.objects.create(status='В покраске', date_change=date.today(), user=request.user, request=req)
         return JsonResponse({'status': 'ok'})
 
     except json.JSONDecodeError:
@@ -376,17 +391,29 @@ def register_devices(request, request_id):
 @permission_classes([IsAuthenticated])
 def search_device(request):
     atm_number = request.GET.get("code")
+    source = request.GET.get("source", "default")
+    atm = ATM.objects.get(serial_number=atm_number)
 
     if not atm_number:
         return JsonResponse({"error": "Параметр 'code' обязателен"}, status=400)
 
     try:
-        atm = ATM.objects.get(serial_number=atm_number)
-        return JsonResponse({
-            "serial_number": atm.serial_number,
-            "model": atm.model,
-            "accepted_at": atm.accepted_at.isoformat(),
-        })
+        if source == "default":
+            return JsonResponse({
+                "serial_number": atm.serial_number,
+                "model": atm.model,
+                "accepted_at": atm.accepted_at.isoformat(),
+            })
+        elif source == "paint":
+            if not ATM.objects.filter(serial_number=atm_number).exists():
+                return JsonResponse({"error": "Устройство не найдено"}, status=404)
+            req = ATM.objects.get(serial_number=atm_number).request
+            req_data = Request.objects.get(request_id=req.request_id)
+            return JsonResponse({
+                "serial_number": atm_number,
+                "model": atm.model,
+                "bank": req_data.project,
+            })
     except ATM.DoesNotExist:
         return JsonResponse({"error": "Устройство не найдено"}, status=404)
 
@@ -645,6 +672,9 @@ def atm_raw_create(request):
             user=user
         )
 
+        atm = ATM.objects.get(serial_number=serial)
+        StatusATM.objects.create(status='Принят на склад', date_change=date.today(), user=request.user, sn=atm)
+
         return JsonResponse({
             "id": atm.id,
             "serial_number": atm.serial_number,
@@ -734,10 +764,15 @@ def atm_for_paint(request):
         atm.request = req
         atm.status = 'Готов к передаче в покраску'
         atm.save()
+        atm = ATM.objects.get(serial_number=sn)
+        StatusATM.objects.create(status='Готов к передаче в покраску', date_change=date.today(), user=request.user,
+                                 sn=atm)
         count_atm_req = Request.objects.get(request_id=request_id).quantity
         count_atm = ATM.objects.filter(request=request_id).count()
         if count_atm == count_atm_req:
             Request.objects.filter(request_id=request_id).update(status="Готова к передачи в покраску")
+            StatusReq.objects.create(status='Заявка готова к передаче в покраску', date_change=date.today(),
+                                     user=request.user, request=req)
             mess_tel(['admin', 'admin_paint'],
                      f'Заявка {request_id} готова к передачи в покраску')
         return JsonResponse({"message": "POST успешно"}, status=201)
@@ -747,6 +782,8 @@ def atm_for_paint(request):
         count_atm_req = Request.objects.get(request_id=request_id).quantity
         count_atm = ATM.objects.filter(request=request_id).count()
         if count_atm == count_atm_req:
+            StatusReq.objects.create(status='Заявка возвращена в статус "Заявка принята(покрасочная)"',
+                                     date_change=date.today(), user=request.user, request=request_id)
             Request.objects.filter(request_id=request_id).update(status="Заявка принята(покрасочная)")
         if not serial_number:
             return JsonResponse({"error": "Не передан atm_id"}, status=400)
@@ -761,3 +798,154 @@ def atm_for_paint(request):
 
         return JsonResponse({"message": "Банкомат удалён из заявки"}, status=200)
     return None
+
+
+def assign_works_to_atm(atm: ATM):
+    all_works = Work.objects.all()
+    for work in all_works:
+        ATMWorkStatus.objects.create(
+            atm=atm,
+            work=work,
+            completed=False,
+            completed_at=None,
+            employee=None
+        )
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def task_paint(request):
+    if request.method == "GET":
+        sn = request.GET.get("sn")
+        source = request.GET.get("source", "default")
+        if not sn:
+            return JsonResponse({"error": "Не передан серийный номер"}, status=400)
+
+        try:
+            atm = ATM.objects.get(serial_number=sn)
+        except ATM.DoesNotExist:
+            return JsonResponse({"error": "Устройство не найдено"}, status=404)
+
+        # фильтруем по этапу
+        if source == "paint":
+            statuses = atm.work_statuses.filter(work__stage__name="Покраска").select_related("work", "employee")
+        else:
+            statuses = atm.work_statuses.all().select_related("work", "employee")
+
+        data = []
+        for s in statuses:
+            if not s.work:
+                continue
+
+            # словарь сотрудник → True/False
+            all_statuses = {
+                str(ws.employee.id): ws.completed
+                for ws in ATMWorkStatus.objects.filter(atm=atm, work=s.work).exclude(employee__isnull=True)
+            }
+
+            completed = all(all_statuses.values()) if all_statuses else False
+
+            data.append({
+                "id": s.work.id,
+                "name": s.work.name,
+                "statuses": all_statuses,
+                "completed": completed,
+            })
+        return JsonResponse(data, safe=False)
+    if request.method == "POST":
+        atm_sn = request.data.get("sn")
+        task_names = request.data.get("tasks", [])
+        atm = ATM.objects.get(serial_number=atm_sn)
+        for task_name in task_names:
+            try:
+                Work.objects.get(name=task_name)
+            except Work.DoesNotExist:
+                continue
+            ATMWorkStatus.objects.filter(
+                atm=atm,
+                work__name__in=task_names
+            ).update(
+                completed=True,
+                completed_at=timezone.now(),
+                employee=request.user
+            )
+            source = request.GET.get("source", "default")
+            if source == "paint":
+                all_completed = not ATMWorkStatus.objects.filter(
+                    atm=atm,
+                    work__stage__name="Покраска",
+                    completed=False
+                ).exists()
+                if all_completed:
+                    ATM.objects.filter(serial_number=atm_sn).update(status='Готов к передаче в ПП')
+        return JsonResponse({'error': 'aas'})
+    return None
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_stages(request):
+    stages = Stage.objects.all().prefetch_related("works")
+    data = []
+    for stage in stages:
+        data.append({
+            "id": stage.id,
+            "name": stage.name,
+            "works": [{"id": w.id, "name": w.name} for w in stage.works.all()]
+        })
+    return JsonResponse(data, safe=False)
+
+
+# Добавление нового этапа
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_stage(request):
+    try:
+        name = request.data.get("name")
+        if not name:
+            return JsonResponse({"error": "Не указано имя этапа"}, status=400)
+        stage = Stage.objects.create(name=name)
+        return JsonResponse({"id": stage.id, "name": stage.name})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+# Удаление этапа
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_stage(request, stage_id):
+    try:
+        stage = Stage.objects.get(id=stage_id)
+        stage.delete()
+        return JsonResponse({"success": True})
+    except Stage.DoesNotExist:
+        return JsonResponse({"error": "Этап не найден"}, status=404)
+
+
+# Добавление работы к этапу
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_work(request, stage_id):
+    try:
+        stage = Stage.objects.get(id=stage_id)
+        name = request.data.get("name")
+        if not name:
+            return JsonResponse({"error": "Не указано имя работы"}, status=400)
+        work = Work.objects.create(stage=stage, name=name)
+        return JsonResponse({"id": work.id, "name": work.name, "stage": stage.name})
+    except Stage.DoesNotExist:
+        return JsonResponse({"error": "Этап не найден"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+# Удаление работы
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_work(request, work_id):
+    try:
+        work = Work.objects.get(id=work_id)
+        work.delete()
+        return JsonResponse({"success": True})
+    except Work.DoesNotExist:
+        return JsonResponse({"error": "Работа не найдена"}, status=404)

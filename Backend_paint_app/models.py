@@ -235,3 +235,78 @@ class ProjectData(models.Model):
 
     def __str__(self):
         return f'{self.project} {self.deadlines} {str(self.comments)}'
+
+
+class StatusReq(models.Model):
+    status = models.CharField(max_length=10, null=False, unique=True)
+    date_change = models.DateField(null=True, blank=True)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    request = models.ForeignKey(
+        Request,
+        to_field='request_id',
+        on_delete=models.CASCADE,
+        related_name='status_requests',
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = "Изменение статусов заявки"
+        verbose_name_plural = "Изменение статусов заявок"
+
+
+class StatusATM(models.Model):
+    status = models.CharField(max_length=10, null=False, unique=True)
+    date_change = models.DateField(null=True, blank=True)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    sn = models.ForeignKey(
+        ATM,
+        to_field='serial_number',
+        on_delete=models.CASCADE,
+        related_name='status_ATM',
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = "Изменение статусов банкомата"
+        verbose_name_plural = "Изменение статусов банкоматов"
+
+
+class Stage(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Этап банкомата"
+        verbose_name_plural = "Этапы банкоматов"
+
+
+class Work(models.Model):
+    stage = models.ForeignKey(Stage, on_delete=models.CASCADE, related_name="works")
+    name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.stage.name} → {self.name}"
+
+    class Meta:
+        verbose_name = "Список работ по банкомату"
+        verbose_name_plural = "Список работ по банкоматам"
+
+
+class ATMWorkStatus(models.Model):
+    atm = models.ForeignKey("ATM", on_delete=models.CASCADE, related_name="work_statuses")
+    work = models.ForeignKey(Work, on_delete=models.CASCADE, related_name="statuses")
+    employee = models.ForeignKey("CustomUser", on_delete=models.SET_NULL, null=True, blank=True)
+    completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ("atm", "work")  # одна работа для одного банкомата не дублируется
+        verbose_name = "Работа по банкомату"
+        verbose_name_plural = "Работы по банкоматам"
+
+    def __str__(self):
+        return f"{self.atm.serial_number} → {self.work.name} ({'OK' if self.completed else 'в процессе'})"
