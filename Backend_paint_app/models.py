@@ -253,7 +253,7 @@ class StatusReq(models.Model):
 
 
 class StatusATM(models.Model):
-    status = models.CharField(max_length=10, null=False)
+    status = models.CharField(max_length=50, null=False)
     date_change = models.DateField(null=True, blank=True)
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     sn = models.ForeignKey(
