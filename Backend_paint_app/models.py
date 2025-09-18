@@ -235,7 +235,7 @@ class ProjectData(models.Model):
 
 
 class StatusReq(models.Model):
-    status = models.CharField(max_length=10, null=False, unique=True)
+    status = models.CharField(max_length=30, null=False, unique=True)
     date_change = models.DateField(null=True, blank=True)
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     request = models.ForeignKey(
