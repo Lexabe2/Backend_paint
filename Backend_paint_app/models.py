@@ -102,15 +102,12 @@ class ModelAtm(models.Model):
 class ATMImage(models.Model):
     atm = models.ForeignKey("ATM", related_name="images", on_delete=models.CASCADE)
     comment = models.TextField(null=True, blank=True)
-    photo_type = models.CharField(max_length=100, blank=True, null=False)
-    image = models.ImageField(upload_to='atm_photos/', null=True, blank=True)
+    photo_type = models.CharField(max_length=100, blank=True)
+    images_data = models.JSONField(null=True, blank=True)  # список фото в base64
 
     class Meta:
-        verbose_name = "Фото неисправностей"
-        verbose_name_plural = "Фото неисправностей"
-
-    def __str__(self):
-        return f"Фото для {self.atm.serial_number}"
+        verbose_name = "Фото"
+        verbose_name_plural = "Фото"
 
 
 from django.contrib.auth import get_user_model
@@ -256,7 +253,7 @@ class StatusReq(models.Model):
 
 
 class StatusATM(models.Model):
-    status = models.CharField(max_length=10, null=False, unique=True)
+    status = models.CharField(max_length=10, null=False)
     date_change = models.DateField(null=True, blank=True)
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     sn = models.ForeignKey(

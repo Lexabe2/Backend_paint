@@ -26,6 +26,8 @@ from datetime import date
 import traceback
 from django.db.models import Count
 from django.utils import timezone
+import base64
+from django.core.files.base import ContentFile
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -590,6 +592,45 @@ def update_complaint_comment(request, complaint_id):
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
+def dec_photo(sn, photos_data, comment, stage):
+    atm = ATM.objects.get(serial_number=sn)
+    saved_files = []
+
+    for idx, photo in enumerate(photos_data):
+        photo_str = photo.get("data", "")
+        if not photo_str:
+            continue
+
+        if ";base64," in photo_str:
+            _, imgstr = photo_str.split(";base64,")
+        else:
+            imgstr = photo_str
+
+        image_bytes = base64.b64decode(imgstr)
+        filename = f"{sn}_{stage}_{idx}.jpg"
+
+        # Сохраняем файл на диск
+        folder_path = f"media/atm_photos/{stage}"
+
+        # Создаём папку, если её нет
+        os.makedirs(folder_path, exist_ok=True)
+
+        # Сохраняем файл
+        file_path = os.path.join(folder_path, f"{sn}_{idx}.jpg")
+        with open(file_path, "wb") as f:
+            f.write(image_bytes)
+
+        saved_files.append(f"atm_photos/{filename}")
+
+    # Создаём одну запись с массивом путей
+    ATMImage.objects.create(
+        atm=atm,
+        comment=comment,
+        photo_type=stage,
+        images_data=saved_files  # тут JSON список
+    )
+
+
 @api_view(["POST", "GET"])
 @permission_classes([IsAuthenticated])
 def atm_raw_create(request):
@@ -632,7 +673,8 @@ def atm_raw_create(request):
         pallet = data.get("pallet")
         status = 'Принят на склад'
         user = request.user
-
+        photos_data = request.data.get("photos", [])  # массив base64
+        comment = request.data.get("comment", "")
         errors = {}
         if not serial:
             errors["serial_number"] = "Обязательное поле."
@@ -671,6 +713,9 @@ def atm_raw_create(request):
             status=status,
             user=user
         )
+
+        if photos_data:  # только если список не пустой
+            dec_photo(serial, photos_data, comment, status)
 
         atm = ATM.objects.get(serial_number=serial)
         StatusATM.objects.create(status='Принят на склад', date_change=date.today(), user=request.user, sn=atm)
