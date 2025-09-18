@@ -8,6 +8,7 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "fallback-insecure-key")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)
 
 
 DEBUG = True
@@ -179,3 +180,9 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 AUTH_USER_MODEL = 'Backend_paint_app.CustomUser'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+import logging
+
+logger = logging.getLogger('app')
+logger.debug("Тестовое сообщение уровня DEBUG")
+logger.info("Тестовое сообщение уровня INFO")
