@@ -310,7 +310,7 @@ class ATMWorkStatus(models.Model):
 
 
 class WarehouseSlot(models.Model):
-    place_number = models.PositiveIntegerField(verbose_name="Номер места", unique=True)
+    place_number = models.CharField(verbose_name="Номер места", unique=True)
     description = models.TextField(verbose_name="Описание", blank=True)
     date_added = models.DateTimeField(auto_now_add=True, verbose_name="Дата поднятия")
 
@@ -330,7 +330,7 @@ class WarehouseHistory(models.Model):
         ("delete", "Удаление"),
     ]
 
-    place_number = models.PositiveIntegerField(verbose_name="Номер места")
+    place_number = models.CharField(verbose_name="Номер места")
     description = models.TextField(verbose_name="Описание", blank=True)
     date_added = models.DateTimeField(auto_now_add=True, verbose_name="Дата действия")
     action = models.CharField(max_length=10, choices=ACTION_CHOICES, verbose_name="Действие")

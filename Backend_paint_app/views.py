@@ -1036,19 +1036,28 @@ def warehouse_list(request):
 @permission_classes([IsAuthenticated])
 def warehouse_add(request):
     """Добавить запись"""
-    if request.method == "POST":
-        data = json.loads(request.body)
-        slot = WarehouseSlot.objects.create(
-            place_number=data.get("place_number"),
-            description=data.get("description", "")
+    data = json.loads(request.body)
+    place_number = data.get("place_number")
+
+    # Проверяем, существует ли уже такое место
+    if WarehouseSlot.objects.filter(place_number=place_number).exists():
+        return JsonResponse(
+            {"error": f"Место {place_number} уже занято"},
+            status=400
         )
-        return JsonResponse({
-            "id": slot.id,
-            "place_number": slot.place_number,
-            "description": slot.description,
-            "date_added": slot.date_added
-        }, json_dumps_params={"ensure_ascii": False})
-    return None
+
+    # Создаём новую запись
+    slot = WarehouseSlot.objects.create(
+        place_number=place_number,
+        description=data.get("description", "")
+    )
+
+    return JsonResponse({
+        "id": slot.id,
+        "place_number": slot.place_number,
+        "description": slot.description,
+        "date_added": slot.date_added
+    }, json_dumps_params={"ensure_ascii": False})
 
 
 @api_view(["PUT", "PATCH"])
