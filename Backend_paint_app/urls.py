@@ -37,4 +37,8 @@ urlpatterns = [
     path("stages/<int:stage_id>/delete/", views.delete_stage, name="delete_stage"),
     path("stages/<int:stage_id>/works/add/", views.add_work, name="add_work"),
     path("works/<int:work_id>/delete/", views.delete_work, name="delete_work"),
+    path("warehouse/", views.warehouse_list, name="warehouse_list"),
+    path("warehouse/add/", views.warehouse_add, name="warehouse_add"),
+    path("warehouse/<int:pk>/", views.warehouse_update, name="warehouse_update"),
+    path("warehouse/<int:pk>/delete/", views.warehouse_delete, name="warehouse_delete"),
 ]

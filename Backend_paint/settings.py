@@ -10,6 +10,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BASE_DIR = Path(__file__).resolve().parent.parent
 os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)
 
+WAREHOUSE_TOTAL_PLACES = 100  # всего мест
 
 DEBUG = True
 

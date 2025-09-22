@@ -235,7 +235,7 @@ class ProjectData(models.Model):
 
 
 class StatusReq(models.Model):
-    status = models.CharField(max_length=30, null=False, unique=True)
+    status = models.CharField(max_length=30, null=False)
     date_change = models.DateField(null=True, blank=True)
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     request = models.ForeignKey(
@@ -307,3 +307,39 @@ class ATMWorkStatus(models.Model):
 
     def __str__(self):
         return f"{self.atm.serial_number} → {self.work.name} ({'OK' if self.completed else 'в процессе'})"
+
+
+class WarehouseSlot(models.Model):
+    place_number = models.PositiveIntegerField(verbose_name="Номер места", unique=True)
+    description = models.TextField(verbose_name="Описание", blank=True)
+    date_added = models.DateTimeField(auto_now_add=True, verbose_name="Дата поднятия")
+
+    def __str__(self):
+        return f"Место {self.place_number} – {self.description[:20]}"
+
+    class Meta:
+        ordering = ["place_number"]
+        verbose_name = "Склад"
+        verbose_name_plural = "Склад"
+
+
+class WarehouseHistory(models.Model):
+    ACTION_CHOICES = [
+        ("create", "Создание"),
+        ("update", "Изменение"),
+        ("delete", "Удаление"),
+    ]
+
+    place_number = models.PositiveIntegerField(verbose_name="Номер места")
+    description = models.TextField(verbose_name="Описание", blank=True)
+    date_added = models.DateTimeField(auto_now_add=True, verbose_name="Дата действия")
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES, verbose_name="Действие")
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Пользователь")
+
+    def __str__(self):
+        return f"[{self.get_action_display()}] Место {self.place_number} – {self.description[:20]}"
+
+    class Meta:
+        ordering = ["-date_added"]
+        verbose_name = "История склада"
+        verbose_name_plural = "История склада"

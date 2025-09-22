@@ -4,7 +4,7 @@ from rest_framework.decorators import parser_classes
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import CustomUser, ATM, ATMImage, Reclamation, ReclamationPhoto, ModelAtm, ProjectData, StatusReq, \
-    StatusATM, Work, ATMWorkStatus, Stage
+    StatusATM, Work, ATMWorkStatus, Stage, WarehouseSlot, WarehouseHistory
 import requests
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes
@@ -810,6 +810,10 @@ def atm_for_paint(request):
         atm.status = 'Готов к передаче в покраску'
         atm.save()
         atm = ATM.objects.get(serial_number=sn)
+        photos_data = request.data.get("photos", [])  # массив base64
+        comment = request.data.get("comment", "")
+        if photos_data:  # только если список не пустой
+            dec_photo(sn, photos_data, comment, 'Готов к передаче в покраску')
         StatusATM.objects.create(status='Готов к передаче в покраску', date_change=date.today(), user=request.user,
                                  sn=atm)
         count_atm_req = Request.objects.get(request_id=request_id).quantity
@@ -994,3 +998,117 @@ def delete_work(request, work_id):
         return JsonResponse({"success": True})
     except Work.DoesNotExist:
         return JsonResponse({"error": "Работа не найдена"}, status=404)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def warehouse_list(request):
+    """Список всех мест с историей изменений"""
+    slots_data = []
+
+    slots = WarehouseSlot.objects.all().order_by("place_number")
+    for slot in slots:
+        # Берем историю для этого места, сортируем по дате
+        history = WarehouseHistory.objects.filter(place_number=slot.place_number).order_by("-date_added")
+        history_list = [
+            {
+                "id": h.id,
+                "description": h.description,
+                "action": h.get_action_display(),
+                "date_added": h.date_added,
+                "user": h.user.username if h.user else None,
+            }
+            for h in history
+        ]
+
+        slots_data.append({
+            "id": slot.id,
+            "place_number": slot.place_number,
+            "description": slot.description,
+            "date_added": slot.date_added,
+            "history": history_list
+        })
+
+    return JsonResponse({"slots": slots_data}, safe=False, json_dumps_params={"ensure_ascii": False})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def warehouse_add(request):
+    """Добавить запись"""
+    if request.method == "POST":
+        data = json.loads(request.body)
+        slot = WarehouseSlot.objects.create(
+            place_number=data.get("place_number"),
+            description=data.get("description", "")
+        )
+        return JsonResponse({
+            "id": slot.id,
+            "place_number": slot.place_number,
+            "description": slot.description,
+            "date_added": slot.date_added
+        }, json_dumps_params={"ensure_ascii": False})
+    return None
+
+
+@api_view(["PUT", "PATCH"])
+@permission_classes([IsAuthenticated])
+def warehouse_update(request, pk):
+    """Изменить запись"""
+    if request.method in ["PUT", "PATCH"]:
+        try:
+            slot = WarehouseSlot.objects.get(pk=pk)
+        except WarehouseSlot.DoesNotExist:
+            return JsonResponse({"error": "Запись не найдена"}, status=404)
+        data = json.loads(request.body)
+        if "place_number" in data and data["place_number"] != slot.place_number:
+            WarehouseHistory.objects.create(
+                place_number=data["place_number"],
+                description=f'Изменил место: было {slot.place_number}, стало {data["place_number"]}',
+                action="update",
+                date_added=datetime.now(),
+                user=request.user,
+            )
+            slot.place_number = data["place_number"]
+
+        # Проверяем, изменилось ли описание
+        if "description" in data and data["description"] != slot.description:
+            WarehouseHistory.objects.create(
+                place_number=data.get("place_number", slot.place_number),
+                description=f'Изменил описание: было "{slot.description}", стало "{data["description"]}"',
+                action="update",
+                date_added=datetime.now(),
+                user=request.user,
+            )
+            slot.description = data["description"]
+
+        slot.save()
+
+        return JsonResponse({
+            "id": slot.id,
+            "place_number": slot.place_number,
+            "description": slot.description,
+            "date_added": slot.date_added
+        }, json_dumps_params={"ensure_ascii": False})
+    return None
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def warehouse_delete(request, pk):
+    """Удалить запись"""
+    if request.method == "DELETE":
+        try:
+            slot = WarehouseSlot.objects.get(pk=pk)
+        except WarehouseSlot.DoesNotExist:
+            return JsonResponse({"error": "Запись не найдена"}, status=404)
+        WarehouseHistory.objects.create(
+            place_number=slot.place_number,
+            description='Удалено',
+            action="delete",
+            date_added=datetime.now(),
+            user=request.user,
+        )
+        slot.delete()
+        return JsonResponse({"success": True})
+    return None
