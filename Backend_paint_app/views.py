@@ -27,7 +27,7 @@ import traceback
 from django.db.models import Count
 from django.utils import timezone
 import base64
-from django.core.files.base import ContentFile
+from urllib.parse import quote
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -592,6 +592,47 @@ def update_complaint_comment(request, complaint_id):
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def upload_photos(request):
+    sn = request.POST.get("sn")
+    status = request.POST.get("status")
+    comment = request.POST.get("comment", "")
+    files = request.FILES.getlist("photos")
+    print(files)
+    atm = ATM.objects.get(serial_number=sn)
+
+    if not sn:
+        return JsonResponse({"error": "Не передан SN"}, status=400)
+    saved_files = []
+
+    # Папка для сохранения: MEDIA_ROOT/atm_photos/
+    save_dir = os.path.join(settings.MEDIA_ROOT, "atm_photos")
+    os.makedirs(save_dir, exist_ok=True)
+
+    for idx, f in enumerate(files):
+        # Имя файла: <SN>_<status>_<индекс>.<ext>
+        ext = os.path.splitext(f.name)[1]
+        save_name = f"{sn}_{status}_{idx}{ext}"
+        saved_files.append(save_name)
+        save_path = os.path.join(save_dir, save_name)
+
+        # Сохраняем файл
+        with open(save_path, "wb+") as destination:
+            for chunk in f.chunks():
+                destination.write(chunk)
+    ATMImage.objects.create(
+        atm=atm,
+        comment=comment,
+        photo_type=status,
+        images_data=saved_files
+        )
+
+    return JsonResponse({
+        "message": "Файлы успешно сохранены",
+    })
+
+
 def dec_photo(sn, photos_data, comment, stage):
     atm = ATM.objects.get(serial_number=sn)
     saved_files = []
@@ -609,26 +650,59 @@ def dec_photo(sn, photos_data, comment, stage):
         image_bytes = base64.b64decode(imgstr)
         filename = f"{sn}_{stage}_{idx}.jpg"
 
-        # Сохраняем файл на диск
-        folder_path = f"media/atm_photos/{stage}"
-
-        # Создаём папку, если её нет
+        folder_path = f"media/atm_photos/"
         os.makedirs(folder_path, exist_ok=True)
 
-        # Сохраняем файл
-        file_path = os.path.join(folder_path, f"{sn}_{idx}.jpg")
+        file_path = os.path.join(folder_path, filename)
         with open(file_path, "wb") as f:
             f.write(image_bytes)
 
-        saved_files.append(f"atm_photos/{filename}")
+        # Проверка, что файл сохранился
+        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+            saved_files.append(f"atm_photos/{filename}")
+        else:
+            return False  # ❌ фото не сохранилось
 
-    # Создаём одну запись с массивом путей
-    ATMImage.objects.create(
-        atm=atm,
-        comment=comment,
-        photo_type=stage,
-        images_data=saved_files  # тут JSON список
-    )
+    # Запишем в БД только если все фото сохранились
+    if saved_files:
+        ATMImage.objects.create(
+            atm=atm,
+            comment=comment,
+            photo_type=stage,
+            images_data=saved_files
+        )
+        return True  # ✅ подтверждение
+
+    return False
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def atm_photos(request, atm_id):
+    try:
+        atm = ATM.objects.get(serial_number=atm_id)
+    except ATM.DoesNotExist:
+        return JsonResponse({"error": "ATM not found"}, status=404)
+
+    images = ATMImage.objects.filter(atm=atm)
+    grouped_photos = {}
+
+    for img in images:
+        for path in img.images_data or []:
+            url_path = quote(path, safe="/")
+            full_url = request.build_absolute_uri(settings.MEDIA_URL + 'atm_photos/' + url_path)
+
+            # Извлекаем статус
+            filename = path.split("/")[-1]
+            parts = filename.split("_")
+            status = "_".join(parts[1:-1]) if len(parts) > 2 else "Неизвестно"
+
+            if status not in grouped_photos:
+                grouped_photos[status] = []
+
+            grouped_photos[status].append(full_url)
+
+    return JsonResponse({"photos": grouped_photos})
 
 
 @api_view(["POST", "GET"])
@@ -693,7 +767,7 @@ def atm_raw_create(request):
             return JsonResponse({"errors": errors}, status=400)
 
         if ATM.objects.filter(serial_number=serial).exists():
-            return JsonResponse({"detail": "ATM с таким serial_number уже существует."}, status=400)
+            return JsonResponse({"detail": "ATM с таким серийным номером уже существует."}, status=400)
 
         # обработка request_id
         request_obj = None
@@ -704,7 +778,7 @@ def atm_raw_create(request):
             except Request.DoesNotExist:
                 return JsonResponse({"detail": "Указанный request_id не найден."}, status=400)
 
-        atm = ATM.objects.create(
+        ATM.objects.create(
             serial_number=serial,
             model=model,
             pallet=f"PP{pallet}",
@@ -714,19 +788,27 @@ def atm_raw_create(request):
             user=user
         )
 
+        photos_saved = None
         if photos_data:  # только если список не пустой
-            dec_photo(serial, photos_data, comment, status)
+            photos_saved = dec_photo(serial, photos_data, comment, status)
 
         atm = ATM.objects.get(serial_number=serial)
-        StatusATM.objects.create(status='Принят на склад', date_change=date.today(), user=request.user, sn=atm)
+        StatusATM.objects.create(
+            status='Принят на склад',
+            date_change=date.today(),
+            user=request.user,
+            sn=atm
+        )
 
-        return JsonResponse({
+        resp = {
             "id": atm.id,
             "serial_number": atm.serial_number,
             "model": atm.model,
             "accepted_at": atm.accepted_at.isoformat(),
             "pallet": atm.pallet,
-        }, status=201)
+            "photos_saved": photos_saved  # null если не было фото, true/false — если были
+        }
+        return JsonResponse(resp, status=201)
     return None
 
 
@@ -810,10 +892,6 @@ def atm_for_paint(request):
         atm.status = 'Готов к передаче в покраску'
         atm.save()
         atm = ATM.objects.get(serial_number=sn)
-        photos_data = request.data.get("photos", [])  # массив base64
-        comment = request.data.get("comment", "")
-        if photos_data:  # только если список не пустой
-            dec_photo(sn, photos_data, comment, 'Готов к передаче в покраску')
         StatusATM.objects.create(status='Готов к передаче в покраску', date_change=date.today(), user=request.user,
                                  sn=atm)
         count_atm_req = Request.objects.get(request_id=request_id).quantity

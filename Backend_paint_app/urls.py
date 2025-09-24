@@ -41,4 +41,6 @@ urlpatterns = [
     path("warehouse/add/", views.warehouse_add, name="warehouse_add"),
     path("warehouse/<int:pk>/", views.warehouse_update, name="warehouse_update"),
     path("warehouse/<int:pk>/delete/", views.warehouse_delete, name="warehouse_delete"),
+    path("atm/<int:atm_id>/photos/", views.atm_photos, name="atm_photos"),
+    path("atm/upload-photos/", views.upload_photos, name="upload_photos"),
 ]
