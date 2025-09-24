@@ -28,6 +28,8 @@ from django.db.models import Count
 from django.utils import timezone
 import base64
 from urllib.parse import quote
+from PIL import Image
+import io
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -599,37 +601,46 @@ def upload_photos(request):
     status = request.POST.get("status")
     comment = request.POST.get("comment", "")
     files = request.FILES.getlist("photos")
-    print(files)
     atm = ATM.objects.get(serial_number=sn)
 
     if not sn:
         return JsonResponse({"error": "Не передан SN"}, status=400)
-    saved_files = []
 
-    # Папка для сохранения: MEDIA_ROOT/atm_photos/
+    saved_files = []
     save_dir = os.path.join(settings.MEDIA_ROOT, "atm_photos")
     os.makedirs(save_dir, exist_ok=True)
 
     for idx, f in enumerate(files):
-        # Имя файла: <SN>_<status>_<индекс>.<ext>
-        ext = os.path.splitext(f.name)[1]
+        ext = os.path.splitext(f.name)[1].lower()
+        if ext not in [".jpg", ".jpeg", ".png"]:
+            ext = ".jpg"  # конвертируем всё в jpg
+
         save_name = f"{sn}_{status}_{idx}{ext}"
-        saved_files.append(save_name)
         save_path = os.path.join(save_dir, save_name)
 
-        # Сохраняем файл
-        with open(save_path, "wb+") as destination:
-            for chunk in f.chunks():
-                destination.write(chunk)
+        # Читаем файл в Pillow
+        img = Image.open(f)
+
+        # Ограничим размер (например, до 1600px по ширине/высоте)
+        max_size = (1600, 1600)
+        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+        # Сохраняем с сжатием
+        img.save(save_path, format="JPEG", quality=85, optimize=True)
+
+        saved_files.append(save_name)
+
+    # Запись в БД
     ATMImage.objects.create(
         atm=atm,
         comment=comment,
         photo_type=status,
         images_data=saved_files
-        )
+    )
 
     return JsonResponse({
         "message": "Файлы успешно сохранены",
+        "files": saved_files
     })
 
 
@@ -650,20 +661,26 @@ def dec_photo(sn, photos_data, comment, stage):
         image_bytes = base64.b64decode(imgstr)
         filename = f"{sn}_{stage}_{idx}.jpg"
 
-        folder_path = f"media/atm_photos/"
+        folder_path = "media/atm_photos/"
         os.makedirs(folder_path, exist_ok=True)
-
         file_path = os.path.join(folder_path, filename)
-        with open(file_path, "wb") as f:
-            f.write(image_bytes)
 
-        # Проверка, что файл сохранился
+        # Загружаем изображение в Pillow
+        img = Image.open(io.BytesIO(image_bytes))
+
+        # Опционально: уменьшаем разрешение (например, ширина макс. 1600px)
+        max_size = (1600, 1600)
+        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+        # Сохраняем сжатое фото
+        img.save(file_path, format="JPEG", quality=85, optimize=True)
+
+        # Проверка
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             saved_files.append(f"atm_photos/{filename}")
         else:
-            return False  # ❌ фото не сохранилось
+            return False
 
-    # Запишем в БД только если все фото сохранились
     if saved_files:
         ATMImage.objects.create(
             atm=atm,
@@ -671,7 +688,7 @@ def dec_photo(sn, photos_data, comment, stage):
             photo_type=stage,
             images_data=saved_files
         )
-        return True  # ✅ подтверждение
+        return True
 
     return False
 
