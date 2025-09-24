@@ -703,11 +703,14 @@ def atm_photos(request, atm_id):
 
     images = ATMImage.objects.filter(atm=atm)
     grouped_photos = {}
-
+    env = os.getenv("DJANGO_ENV", "development")  # default developmen
     for img in images:
         for path in img.images_data or []:
             url_path = quote(path, safe="/")
-            full_url = request.build_absolute_uri(settings.MEDIA_URL + url_path)
+            if env == "development":
+                full_url = request.build_absolute_uri(settings.MEDIA_URL + 'atm_photos/' + url_path)
+            else:
+                full_url = request.build_absolute_uri(settings.MEDIA_URL + url_path)
 
             # Извлекаем статус
             filename = path.split("/")[-1]
