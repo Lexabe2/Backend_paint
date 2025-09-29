@@ -760,12 +760,16 @@ def atm_raw_create(request):
             data = json.loads(request.body.decode("utf-8"))
         except json.JSONDecodeError:
             return JsonResponse({"detail": "Invalid JSON"}, status=400)
-
+        reception = data.get("reception")
+        status = None
+        if reception == 'new':
+            status = 'Принят на склад'
+        elif reception == 'paint':
+            status = 'Принят из покраски "Другая"'
         serial = data.get("serial_number")
         model = data.get("model")
         accepted_at = data.get("accepted_at")
         pallet = data.get("pallet")
-        status = 'Принят на склад'
         user = request.user
         photos_data = request.data.get("photos", [])  # массив base64
         comment = request.data.get("comment", "")
