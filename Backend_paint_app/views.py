@@ -601,6 +601,7 @@ def upload_photos(request):
     status = request.POST.get("status")
     comment = request.POST.get("comment", "")
     files = request.FILES.getlist("photos")
+    defect = request.POST.get("defect")
     atm = ATM.objects.get(serial_number=sn)
 
     if not sn:
@@ -614,15 +615,17 @@ def upload_photos(request):
         ext = os.path.splitext(f.name)[1].lower()
         if ext not in [".jpg", ".jpeg", ".png"]:
             ext = ".jpg"  # конвертируем всё в jpg
-
-        save_name = f"{sn}_{status}_{idx}{ext}"
+        if status == "Без статуса":
+            save_name = f"{sn}_{defect}_{idx}{ext}"
+        else:
+            save_name = f"{sn}_{status}_{idx}{ext}"
         save_path = os.path.join(save_dir, save_name)
 
         # Читаем файл в Pillow
         img = Image.open(f)
 
         # Ограничим размер (например, до 1600px по ширине/высоте)
-        max_size = (1600, 1600)
+        max_size = (1920, 1600)
         img.thumbnail(max_size, Image.Resampling.LANCZOS)
 
         # Сохраняем с сжатием
@@ -721,7 +724,6 @@ def atm_photos(request, atm_id):
                 grouped_photos[status] = []
 
             grouped_photos[status].append(full_url)
-
     return JsonResponse({"photos": grouped_photos})
 
 
@@ -1222,4 +1224,65 @@ def warehouse_delete(request, pk):
         )
         slot.delete()
         return JsonResponse({"success": True})
+    return None
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def atm_list(request):
+    page = request.GET.get("page")
+    if page == 'otk':
+        atms = ATM.objects.filter(status__in=['Исправлен', 'Окрашен', 'Принят из покраски "Другая"']).values(
+            "serial_number", "pallet",
+            "model")
+        return JsonResponse({"atms": list(atms)})
+    elif page == 'corrections':
+        atms = ATM.objects.filter(status='Возврат в покрасочную').values(
+            "serial_number", "pallet",
+            "model")
+        return JsonResponse({"atms": list(atms)})
+    return None
+
+
+def add_status_atm(sn, status, request):
+    atm = ATM.objects.get(serial_number=sn)
+    ATM.objects.filter(serial_number=sn).update(status=status)
+    StatusATM.objects.create(sn=atm, status=status, date_change=datetime.now(), user=request.user)
+    return True
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def otk(request):
+    if request.method == "GET":
+        query = request.GET.get("query")  # получаем параметр query
+        if not query:
+            return JsonResponse({"error": "Не указан query"}, status=400)
+
+        atms = ATM.objects.filter(serial_number=query) | ATM.objects.filter(pallet=query)
+        atms = atms.values("serial_number", "pallet", "model", "status", "accepted_at")
+
+        return JsonResponse({"atms": list(atms)})
+    elif request.method == "POST":
+        data = json.loads(request.body)
+        sn = data.get("atmSerial")
+        has_issues = data.get("hasIssues")
+        if has_issues:
+            status = 'Возврат в покрасочную'
+            mess_tel(['admin', 'admin_paint'], f'Банкомат {sn} возвращен, не прошел ОТК')
+        else:
+            status = 'Готов к передаче в ПП'
+        add_status_atm(sn, status, request)
+        return JsonResponse({"status": has_issues})
+    return None
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def corrections(request):
+    if request.method == "POST":
+        sn = request.data.get("atmSerial")  # <-- вместо GET
+        add_status_atm(sn, 'Исправлен', request)
+        mess_tel(['admin', 'storekeeper'], f'Банкомат {sn} исправлен')
+        return JsonResponse({"status": True})
     return None

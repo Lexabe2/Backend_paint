@@ -43,4 +43,7 @@ urlpatterns = [
     path("warehouse/<int:pk>/delete/", views.warehouse_delete, name="warehouse_delete"),
     path("atm/<int:atm_id>/photos/", views.atm_photos, name="atm_photos"),
     path("atm/upload-photos/", views.upload_photos, name="upload_photos"),
+    path("atm_list/", views.atm_list, name="atm_list"),
+    path("otk/", views.otk, name="otk"),
+    path("corrections/", views.corrections, name="corrections"),
 ]

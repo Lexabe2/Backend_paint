@@ -343,3 +343,4 @@ class WarehouseHistory(models.Model):
         ordering = ["-date_added"]
         verbose_name = "История склада"
         verbose_name_plural = "История склада"
+
