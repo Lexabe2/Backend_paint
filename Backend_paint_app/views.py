@@ -403,10 +403,20 @@ def search_device(request):
 
     try:
         if source == "default":
+            status_atm = StatusATM.objects.filter(sn=atm)
+            status_history = []
+            for s in status_atm:
+                status_history.append({
+                    "status": s.status,
+                    "user": s.user.username if s.user else None,
+                    "date": s.date_change,
+                })
             return JsonResponse({
                 "serial_number": atm.serial_number,
                 "model": atm.model,
-                "accepted_at": atm.accepted_at.isoformat(),
+                "accepted_at": atm.accepted_at.isoformat() if atm.accepted_at else None,
+                "status": atm.status,
+                "status_history": status_history,
             })
         elif source == "paint":
             if not ATM.objects.filter(serial_number=atm_number).exists():
@@ -1240,6 +1250,11 @@ def atm_list(request):
         atms = ATM.objects.filter(status='Возврат в покрасочную').values(
             "serial_number", "pallet",
             "model")
+        return JsonResponse({"atms": list(atms)})
+    elif page == 'viewing':
+        atms = ATM.objects.all().values(
+            "serial_number", "pallet", 'status' ,
+            "model", "accepted_at")
         return JsonResponse({"atms": list(atms)})
     return None
 
