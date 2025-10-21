@@ -46,4 +46,7 @@ urlpatterns = [
     path("atm_list/", views.atm_list, name="atm_list"),
     path("otk/", views.otk, name="otk"),
     path("corrections/", views.corrections, name="corrections"),
+    path("acceptance_pp/", views.acceptance_pp, name="acceptance_pp"),
+    path("status_req/", views.status_req, name="status_req"),
+    path("changes_req_atm/", views.changes_req_atm, name="changes_req_atm"),
 ]

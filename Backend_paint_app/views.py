@@ -4,14 +4,13 @@ from rest_framework.decorators import parser_classes
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import CustomUser, ATM, ATMImage, Reclamation, ReclamationPhoto, ModelAtm, ProjectData, StatusReq, \
-    StatusATM, Work, ATMWorkStatus, Stage, WarehouseSlot, WarehouseHistory
+    StatusATM, Work, ATMWorkStatus, Stage, WarehouseSlot, WarehouseHistory, Request
 import requests
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 import os
-from .models import Request
 import platform
 import socket
 from django.http import JsonResponse
@@ -30,6 +29,8 @@ import base64
 from urllib.parse import quote
 from PIL import Image
 import io
+from .token_required import token_required
+from .funk import changes_req, changes_req_atm_funk
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -1253,16 +1254,19 @@ def atm_list(request):
         return JsonResponse({"atms": list(atms)})
     elif page == 'viewing':
         atms = ATM.objects.all().values(
-            "serial_number", "pallet", 'status' ,
+            "serial_number", "pallet", 'status',
             "model", "accepted_at")
         return JsonResponse({"atms": list(atms)})
     return None
 
 
-def add_status_atm(sn, status, request):
+def add_status_atm(sn, status, flag=False, request=None, user=None):
     atm = ATM.objects.get(serial_number=sn)
     ATM.objects.filter(serial_number=sn).update(status=status)
-    StatusATM.objects.create(sn=atm, status=status, date_change=datetime.now(), user=request.user)
+    if flag:
+        StatusATM.objects.create(sn=atm, status=status, date_change=datetime.now(), user=user)
+    else:
+        StatusATM.objects.create(sn=atm, status=status, date_change=datetime.now(), user=request.user)
     return True
 
 
@@ -1299,5 +1303,76 @@ def corrections(request):
         sn = request.data.get("atmSerial")  # <-- вместо GET
         add_status_atm(sn, 'Исправлен', request)
         mess_tel(['admin', 'storekeeper'], f'Банкомат {sn} исправлен')
+        return JsonResponse({"status": True})
+    return None
+
+
+@api_view(["GET", "POST"])
+@token_required
+def acceptance_pp(request):
+    body = request.data
+    status = request.GET.get("status")
+    if request.method == "GET":
+        list_atm = ATM.objects.filter(status=status).values('serial_number', 'pallet', 'status',
+                                                            'model')
+        return JsonResponse({"data": list(list_atm)})
+    if request.method == "POST":
+        atm_serials = body.get("atms", [])
+        status = body.get("status")
+        user = CustomUser.objects.get(username="Admin_pp")  # точное совпадение
+        for atm in atm_serials:
+            add_status_atm(atm, status, flag=True, user=user)
+        return JsonResponse({"status": True})
+    return None
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+def status_req(request):
+    if request.method == "GET":
+        req_id = request.GET.get("id")
+        if not req_id:
+            return JsonResponse({"error": "id не передан"}, status=400)
+
+        try:
+            req = Request.objects.get(request_id=req_id)
+        except Request.DoesNotExist:
+            return JsonResponse({"error": "Заявка не найдена"}, status=404)
+
+        atms_req = ATM.objects.filter(request_id=req.request_id)
+        atms_not_req = ATM.objects.filter(request_id__isnull=True)
+        atm_list_req = [{"sn": a.serial_number, 'accepted_at': a.accepted_at, "model": a.model, "pallet": a.pallet} for
+                        a in atms_req]
+        atm_list_not_req = [{"sn": a.serial_number, 'accepted_at': a.accepted_at, "model": a.model, "pallet": a.pallet}
+                            for a in atms_not_req]
+
+        return JsonResponse({
+            "status": True,
+            "request": {
+                "number": req.request_id,
+                "project": req.project,
+                "status": req.status,
+                "date_received": req.date_received.strftime("%Y-%m-%d %H:%M:%S"),
+            },
+            "atm_list_req": atm_list_req,
+            "atm_list_not_req": atm_list_not_req,
+        })
+    if request.method == "PATCH":
+        body = request.data
+        req_id = request.GET.get("id")
+        status = body.get("status")
+        changes_req(req_id, status, request)
+        return JsonResponse({"status": status})
+    return None
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def changes_req_atm(request):
+    if request.method == "PATCH":
+        req_id = request.GET.get("id")
+        body = request.data
+        sn = body.get("sn")
+        changes_req_atm_funk(req_id, sn, request)
         return JsonResponse({"status": True})
     return None
