@@ -9,7 +9,7 @@ class CustomUser(AbstractUser):
         ('admin', 'Администратор'),
         ('admin_paint', 'Админ_пок'),
         ('storekeeper', 'Кладовщик'),
-        ('moderator', 'Модератор'),
+        ('admin_pp', 'Админ_пп'),
         ('user', 'Пользователь'),
     ]
 
@@ -268,6 +268,9 @@ class StatusATM(models.Model):
     class Meta:
         verbose_name = "Изменение статусов банкомата"
         verbose_name_plural = "Изменение статусов банкоматов"
+
+    def __str__(self):
+        return f'Банкомат: {self.sn.serial_number} | Статус: {self.status} | Дата: {self.date_change} | Пользователь: {self.user}'
 
 
 class Stage(models.Model):
