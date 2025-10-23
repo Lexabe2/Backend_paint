@@ -1369,10 +1369,25 @@ def status_req(request):
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def changes_req_atm(request):
-    if request.method == "PATCH":
-        req_id = request.GET.get("id")
-        body = request.data
-        sn = body.get("sn")
+    req_id = request.GET.get("id")
+    sn = request.data.get("sn")
+
+    if not req_id or not sn:
+        return Response(
+            {"status": False, "error": "Поля 'id' и 'sn' обязательны."},
+            status=400
+        )
+
+    try:
         changes_req_atm_funk(req_id, sn, request)
-        return JsonResponse({"status": True})
-    return None
+        return Response({"status": True}, status=200)
+
+    except ATM.DoesNotExist:
+        return Response({"status": False, "error": f"АТМ с серийным номером '{sn}' не найден."}, status=404)
+
+    except Request.DoesNotExist:
+        return Response({"status": False, "error": f"Заявка с ID '{req_id}' не найдена."}, status=404)
+
+    except Exception as e:
+        # Логирование можно добавить сюда
+        return Response({"status": False, "error": str(e)}, status=500)
