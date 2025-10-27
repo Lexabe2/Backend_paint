@@ -49,4 +49,5 @@ urlpatterns = [
     path("acceptance_pp/", views.acceptance_pp, name="acceptance_pp"),
     path("status_req/", views.status_req, name="status_req"),
     path("changes_req_atm/", views.changes_req_atm, name="changes_req_atm"),
+    path("status_atm/", views.status_atm, name="status_atm"),
 ]

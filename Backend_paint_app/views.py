@@ -30,7 +30,7 @@ from urllib.parse import quote
 from PIL import Image
 import io
 from .token_required import token_required
-from .funk import changes_req, changes_req_atm_funk
+from .funk import changes_req, changes_req_atm_funk, changes_status_atm_funk
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -1363,7 +1363,7 @@ def status_req(request):
         status = body.get("status")
         changes_req(req_id, status, request)
         return JsonResponse({"status": status})
-    return None
+    return JsonResponse({"message": "Метод не реализован"}, status=400)
 
 
 @api_view(["PATCH"])
@@ -1391,3 +1391,42 @@ def changes_req_atm(request):
     except Exception as e:
         # Логирование можно добавить сюда
         return Response({"status": False, "error": str(e)}, status=500)
+
+
+@api_view(["GET", "POST", "PATCH"])
+@permission_classes([IsAuthenticated])
+def status_atm(request):
+    # === История конкретного банкомата ===
+    serial_number = request.GET.get("history")
+    if serial_number:
+        history = (
+            StatusATM.objects.filter(sn__serial_number=serial_number)
+            .values("status", "date_change", "user__username")
+            .order_by("-date_change")
+        )
+        return JsonResponse({"history": list(history)}, safe=False)
+
+    # === Получить список всех банкоматов ===
+    if request.method == "GET":
+        atms = ATM.objects.all().values(
+            "serial_number", "accepted_at", "model", "request", "pallet", "status"
+        )
+        return JsonResponse({"data": list(atms)}, safe=False)
+
+    # === Изменить статус банкомата ===
+    if request.method == "PATCH":
+        data = request.data
+        serial_number = data.get("serial_number")
+        new_status = data.get("status")
+
+        if not serial_number or not new_status:
+            return JsonResponse({"error": "serial_number и status обязательны"}, status=400)
+        try:
+            result = changes_status_atm_funk(serial_number, new_status, request)
+
+            if result["success"]:
+                return JsonResponse({"message": result["message"], "status": new_status})
+        except ATM.DoesNotExist:
+            return JsonResponse({"error": "Банкомат не найден"}, status=404)
+
+    return JsonResponse({"error": "Метод не реализован"}, status=400)

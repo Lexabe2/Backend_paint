@@ -1,5 +1,6 @@
 from .models import ATM, Request, StatusReq, StatusATM
 from datetime import date
+from django.core.exceptions import ObjectDoesNotExist
 
 
 def changes_req(req, status, request):
@@ -31,3 +32,33 @@ def changes_req_atm_funk(req_id, sn, request):
     )
 
     return True
+
+
+from datetime import date
+from django.core.exceptions import ObjectDoesNotExist
+from .models import ATM, StatusATM
+
+
+def changes_status_atm_funk(sn, new_status, request):
+    try:
+        # Получаем банкомат
+        atm = ATM.objects.get(serial_number=sn)
+        # Обновляем статус
+        atm.status = new_status
+        atm.save()
+
+        # Создаём запись в истории
+        StatusATM.objects.create(
+            status=f'Изменен на статус {new_status} (ручное изменение)',
+            date_change=date.today(),
+            user=request.user,
+            sn=atm
+        )
+
+        return {"success": True, "message": "Статус успешно изменён"}
+
+    except ObjectDoesNotExist:
+        return {"success": False, "message": f"Банкомат с серийным номером {sn} не найден"}
+
+    except Exception as e:
+        return {"success": False, "message": f"Ошибка при изменении статуса: {str(e)}"}
