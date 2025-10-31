@@ -1435,47 +1435,69 @@ def status_atm(request):
 @permission_classes([IsAuthenticated])
 def act(request):
     if request.method == "GET":
-        # 🔹 Получаем банкоматы
-        atms = ATM.objects.filter(score_paint="Не добавлен в счет").order_by("id")
-        data_atm = [
-            {
-                "id": atm.id,
-                "serial_number": atm.serial_number,
-                "model": atm.model,
-                "status": atm.status,
-                "pallet": atm.pallet,
-                "score_paint": atm.score_paint,
-                "request": Request.objects.get(request_id=atm.request).request_id,
-            }
-            for atm in atms
-        ]
+        try:
+            # 🔹 Получаем банкоматы
+            atms = ATM.objects.filter(score_paint="Не добавлен в счет").order_by("id")
+            data_atm = []
 
-        # 🔹 Получаем акты (счета)
-        invoices = InvoicePaint.objects.all().order_by("-created_at")
-        last_invoice = InvoicePaint.objects.order_by("-number").first()
+            for atm in atms:
+                try:
+                    req = Request.objects.get(request_id=atm.request)
+                    request_value = req.request_id
+                except Request.DoesNotExist:
+                    request_value = None  # если заявки нет — не ломаем JSON
 
-        data_invoices = [
-            {
-                "id": inv.id,
-                "number": inv.number,
-                "created_at": inv.created_at,
-                "comment": inv.comment,
-                "created_by": inv.created_by.username if inv.created_by else None,
-                "file": request.build_absolute_uri(inv.file.url) if inv.file else None,
-                "file_signature": request.build_absolute_uri(inv.file_signature.url) if inv.file_signature else None,
-                "atm_count": inv.atms.count(),
-            }
-            for inv in invoices
-        ]
-        # 🔹 Возвращаем всё вместе
-        return JsonResponse(
-            {
+                data_atm.append({
+                    "id": atm.id,
+                    "serial_number": atm.serial_number,
+                    "model": atm.model,
+                    "status": atm.status,
+                    "pallet": atm.pallet,
+                    "score_paint": atm.score_paint,
+                    "request": request_value,
+                })
+
+            # 🔹 Получаем акты (счета)
+            invoices = InvoicePaint.objects.all().order_by("-created_at")
+            last_invoice = InvoicePaint.objects.order_by("-number").first()
+
+            data_invoices = []
+            for inv in invoices:
+                try:
+                    data_invoices.append({
+                        "id": inv.id,
+                        "number": inv.number,
+                        "created_at": inv.created_at,
+                        "comment": inv.comment,
+                        "created_by": inv.created_by.username if inv.created_by else None,
+                        "file": request.build_absolute_uri(inv.file.url) if inv.file else None,
+                        "file_signature": request.build_absolute_uri(
+                            inv.file_signature.url) if inv.file_signature else None,
+                        "atm_count": inv.atms.count(),
+                    })
+                except Exception as e:
+                    data_invoices.append({
+                        "id": inv.id,
+                        "number": inv.number,
+                        "error": str(e),
+                    })
+
+            # 🔹 Возвращаем всё вместе
+            return JsonResponse({
                 "atms": data_atm,
                 "invoices": data_invoices,
                 "last_invoice": int(last_invoice.number) + 1 if last_invoice else 1,
-            },
-            safe=False,
-        )
+            }, safe=False)
+
+        except Exception as e:
+            # 🔥 Глобальная обработка всех неожиданных ошибок
+            error_trace = traceback.format_exc()
+            print("❌ Ошибка в atm_act:\n", error_trace)
+
+            return JsonResponse({
+                "error": str(e),
+                "trace": error_trace,
+            }, status=500)
     if request.method == "POST":
         sn = request.data.get("atms")
         data = ATM.objects.get(id=sn[0])
