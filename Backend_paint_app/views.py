@@ -4,7 +4,7 @@ from rest_framework.decorators import parser_classes
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import CustomUser, ATM, ATMImage, Reclamation, ReclamationPhoto, ModelAtm, ProjectData, StatusReq, \
-    StatusATM, Work, ATMWorkStatus, Stage, WarehouseSlot, WarehouseHistory, Request
+    StatusATM, Work, ATMWorkStatus, Stage, WarehouseSlot, WarehouseHistory, Request, InvoicePaint
 import requests
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes
@@ -26,11 +26,11 @@ import traceback
 from django.db.models import Count
 from django.utils import timezone
 import base64
-from urllib.parse import quote
 from PIL import Image
 import io
 from .token_required import token_required
-from .funk import changes_req, changes_req_atm_funk, changes_status_atm_funk
+from .funk import changes_req, changes_req_atm_funk, changes_status_atm_funk, scan_word_file
+from urllib.parse import quote
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -195,7 +195,6 @@ def dashboard(request):
         # Считаем заявки по статусам
         data_req = list(Request.objects.exclude(status='Закрыта').values("status").annotate(count=Count("id")))
         atm_counts = list(ATM.objects.values('status').annotate(count=Count('id')))
-        print(atm_counts)
         return JsonResponse({"data": data_req, 'atm_counts': atm_counts})
 
     elif source == "paint":
@@ -1300,7 +1299,7 @@ def otk(request):
 @permission_classes([IsAuthenticated])
 def corrections(request):
     if request.method == "POST":
-        sn = request.data.get("atmSerial")  # <-- вместо GET
+        sn = request.data.get("atmSerial")
         add_status_atm(sn, 'Исправлен', request)
         mess_tel(['admin', 'storekeeper'], f'Банкомат {sn} исправлен')
         return JsonResponse({"status": True})
@@ -1393,7 +1392,7 @@ def changes_req_atm(request):
         return Response({"status": False, "error": str(e)}, status=500)
 
 
-@api_view(["GET", "POST", "PATCH"])
+@api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
 def status_atm(request):
     # === История конкретного банкомата ===
@@ -1430,3 +1429,94 @@ def status_atm(request):
             return JsonResponse({"error": "Банкомат не найден"}, status=404)
 
     return JsonResponse({"error": "Метод не реализован"}, status=400)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def act(request):
+    if request.method == "GET":
+        # 🔹 Получаем банкоматы
+        atms = ATM.objects.filter(score_paint="Не добавлен в счет").order_by("id")
+        data_atm = [
+            {
+                "id": atm.id,
+                "serial_number": atm.serial_number,
+                "model": atm.model,
+                "status": atm.status,
+                "pallet": atm.pallet,
+                "score_paint": atm.score_paint,
+                "request": Request.objects.get(request_id=atm.request).request_id,
+            }
+            for atm in atms
+        ]
+
+        # 🔹 Получаем акты (счета)
+        invoices = InvoicePaint.objects.all().order_by("-created_at")
+        last_invoice = InvoicePaint.objects.order_by("-number").first()
+
+        data_invoices = [
+            {
+                "id": inv.id,
+                "number": inv.number,
+                "created_at": inv.created_at,
+                "comment": inv.comment,
+                "created_by": inv.created_by.username if inv.created_by else None,
+                "file": request.build_absolute_uri(inv.file.url) if inv.file else None,
+                "file_signature": request.build_absolute_uri(inv.file_signature.url) if inv.file_signature else None,
+                "atm_count": inv.atms.count(),
+            }
+            for inv in invoices
+        ]
+        # 🔹 Возвращаем всё вместе
+        return JsonResponse(
+            {
+                "atms": data_atm,
+                "invoices": data_invoices,
+                "last_invoice": int(last_invoice.number) + 1 if last_invoice else 1,
+            },
+            safe=False,
+        )
+    if request.method == "POST":
+        sn = request.data.get("atms")
+        data = ATM.objects.get(id=sn[0])
+        list_sn = []
+        for atm in sn:
+            list_sn.append(ATM.objects.get(id=atm).serial_number)
+        project = Request.objects.get(request_id=data.request).project
+        model = data.model
+        number = request.data.get("number")
+        date_invoices = request.data.get("date")
+        cor_data = datetime.strptime(date_invoices, "%Y-%m-%d").date()
+        scan_word_file('media/samples/pattern_act_paint_op.docx', number, project, model, list_sn, cor_data)
+        comment = request.data.get("comment")
+        invoice = InvoicePaint(
+            number=number,
+            created_at=date_invoices,
+            file=f'invoices/АВР_по_покраске_№{number}.docx',
+            created_by=request.user,
+            comment=comment
+        )
+        invoice.save()  # сначала сохраняем объект, чтобы была возможность добавить M2M
+
+        # Добавляем банкоматы (уже существующие в базе)
+
+        invoice.atms.set(ATM.objects.filter(id__in=sn))
+        ATM.objects.filter(id__in=sn).update(score_paint=f'АВР_по_покраске_№{number}.docx')
+        return JsonResponse('success', safe=False)
+    return JsonResponse({"error": "Метод не реализован"}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_signature(request, pk):
+    act = InvoicePaint.objects.get(id=pk)
+    file = request.FILES.get("file_signature")
+
+    if not file:
+        return Response({"error": "Файл не передан"}, status=400)
+
+    act.file_signature = file
+    act.save()
+
+    return Response(
+        {"message": "Файл загружен успешно", "file_signature": request.build_absolute_uri(act.file_signature.url)})

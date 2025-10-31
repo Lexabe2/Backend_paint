@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import CustomUser, Request, ATM, ATMImage, ReclamationPhoto, Reclamation, ModelAtm, ProjectData, StatusReq, \
-    StatusATM, Work, Stage, ATMWorkStatus, WarehouseSlot, WarehouseHistory
+    StatusATM, Work, Stage, ATMWorkStatus, WarehouseSlot, WarehouseHistory, InvoicePaint
 
 
 @admin.register(CustomUser)
@@ -26,6 +26,7 @@ admin.site.register(Stage)
 admin.site.register(ATMWorkStatus)
 admin.site.register(WarehouseSlot)
 admin.site.register(WarehouseHistory)
+admin.site.register(InvoicePaint)
 
 
 

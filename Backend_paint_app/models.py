@@ -77,7 +77,7 @@ class ATM(models.Model):
         null=True,
         blank=True,
     )
-
+    score_paint = models.CharField(max_length=100, default='Не добавлен в счет', blank=True)
     class Meta:
         verbose_name = "Банкомат"
         verbose_name_plural = "Банкоматы"
@@ -347,3 +347,21 @@ class WarehouseHistory(models.Model):
         verbose_name = "История склада"
         verbose_name_plural = "История склада"
 
+
+
+class InvoicePaint(models.Model):
+    number = models.CharField("Номер счета", max_length=50, unique=True)
+    created_at = models.DateField("Дата создания", default=timezone.now)
+    file = models.FileField("Файл счета (.docx)", upload_to="invoices/")
+    file_signature = models.FileField("Файл счета (подписанный) (.pdf)", upload_to="signature/")
+    atms = models.ManyToManyField("ATM", related_name="invoices", blank=True)
+    created_by = models.ForeignKey("CustomUser", on_delete=models.SET_NULL, null=True, blank=True)
+    comment = models.TextField("Комментарий", blank=True)
+
+    class Meta:
+        verbose_name = "Счет"
+        verbose_name_plural = "Счета"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Счет №{self.number} от {self.created_at}"

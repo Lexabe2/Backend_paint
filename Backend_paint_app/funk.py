@@ -1,6 +1,16 @@
 from .models import ATM, Request, StatusReq, StatusATM
 from datetime import date
 from django.core.exceptions import ObjectDoesNotExist
+from docx import Document
+from docx.shared import Pt
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.oxml.ns import qn
+
+months = {
+    1: "январь", 2: "февраль", 3: "март", 4: "апрель",
+    5: "май", 6: "июнь", 7: "июль", 8: "август",
+    9: "сентябрь", 10: "октябрь", 11: "ноябрь", 12: "декабрь"
+}
 
 
 def changes_req(req, status, request):
@@ -34,11 +44,6 @@ def changes_req_atm_funk(req_id, sn, request):
     return True
 
 
-from datetime import date
-from django.core.exceptions import ObjectDoesNotExist
-from .models import ATM, StatusATM
-
-
 def changes_status_atm_funk(sn, new_status, request):
     try:
         # Получаем банкомат
@@ -62,3 +67,75 @@ def changes_status_atm_funk(sn, new_status, request):
 
     except Exception as e:
         return {"success": False, "message": f"Ошибка при изменении статуса: {str(e)}"}
+
+
+def scan_word_file(file_path, number, project, model, atm_sn, date_inv):
+    doc = Document(file_path)
+    d = date_inv
+    formatted = f"{months[d.month]} {d.year}"
+
+    # === ЗАМЕНЫ В АБЗАЦАХ С ШРИФТОМ ===
+    # Абзац 0
+    p0 = doc.paragraphs[0]
+    p0.clear()
+    run0 = p0.add_run(f"Акт выполненных работ по покраске банкомата № {number}")
+    run0.font.name = 'Calibri'
+    run0._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+    run0.font.size = Pt(14)
+    run0.font.bold = True
+
+    # Абзац 1
+    p1 = doc.paragraphs[1]
+    p1.clear()
+    run1 = p1.add_run(f"{project} – Hyosung {model}  – {formatted}")
+    run1.font.name = 'Calibri'
+    run1._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+    run1.font.size = Pt(14)
+    run1.font.bold = True
+
+    # Абзац 2
+    p2 = doc.paragraphs[2]
+    p2.clear()
+    run2 = p2.add_run(f'от {d.strftime("%d.%m.%Y")}')
+    run2.font.name = 'Calibri'
+    run2._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+    run2.font.size = Pt(11)
+    run2.font.bold = True
+
+    # Абзац 8
+    p8 = doc.paragraphs[8]
+    p8.clear()
+    run8_1 = p8.add_run("На общую сумму: ")
+    run8_1.font.name = 'Calibri'
+    run8_1._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+    run8_1.font.size = Pt(11)
+    run8_1.font.bold = True
+
+    total_sum = f"{len(atm_sn) * 24000:,.2f}".replace(",", " ").replace(".", ",")
+    run8_2 = p8.add_run(f"{total_sum} рублей 0 копеек.")
+    run8_2.font.name = 'Calibri'
+    run8_2._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+    run8_2.font.size = Pt(14)
+    run8_2.font.bold = True
+
+    # === ЗАМЕНЫ В ТАБЛИЦАХ ===
+    result = ", ".join(atm_sn)
+    replacements_tables = {
+        (0, 1, 0): result,  # таблица 0, строка 1, столбец 0
+        (1, 1, 1): f"{len(atm_sn)}",  # таблица 1, строка 1, столбец 1
+        (1, 1, 2): f"24 000,00",  # таблица 1, строка 1, столбец 2
+        (1, 1, 3): total_sum  # таблица 1, строка 1, столбец 3
+    }
+
+    for (t_index, r_index, c_index), new_text in replacements_tables.items():
+        if t_index < len(doc.tables):
+            table = doc.tables[t_index]
+            if r_index < len(table.rows) and c_index < len(table.rows[r_index].cells):
+                table.rows[r_index].cells[c_index].text = new_text
+            else:
+                print(f"Ячейка ({r_index}, {c_index}) не найдена в таблице {t_index}")
+        else:
+            print(f"Таблица {t_index} не найдена")
+
+    # === СОХРАНЯЕМ ФАЙЛ ===
+    doc.save(f'media/invoices/АВР_по_покраске_№{number}.docx')
