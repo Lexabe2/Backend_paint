@@ -234,7 +234,7 @@ def create_request(request):
     try:
         data = json.loads(request.body)
 
-        required_fields = ['project', 'device', 'quantity']
+        required_fields = ['project', 'device', 'quantity', 'paint_shop']
         if not all(field in data for field in required_fields):
             log_request_info(logger_app, request, 'Не все поля заполнены', level='error')
             return JsonResponse({'error': 'Не все поля заполнены'}, status=400)
@@ -249,7 +249,8 @@ def create_request(request):
                 if data.get('deadline')
                 else None
             ),
-            status=data.get('status') or 'Создана'
+            status=data.get('status') or 'Создана',
+            paint_shop=data['paint_shop'],
         )
         log_request_info(logger_app, request, f'Заявка создана {data}', level='info')
         new_request.save()
@@ -1437,15 +1438,20 @@ def act(request):
     if request.method == "GET":
         try:
             # 🔹 Получаем банкоматы
-            atms = ATM.objects.filter(score_paint="Не добавлен в счет").order_by("id")
+            atms = ATM.objects.filter(
+                score_paint="Не добавлен в счет",
+                request__paint_shop='aparinki'  # ✅ фильтруем по заявке
+            ).order_by("id")
             data_atm = []
 
             for atm in atms:
                 try:
                     req = Request.objects.get(request_id=atm.request)
                     request_value = req.request_id
+                    paint_shop = req.get_paint_shop_display()
                 except Request.DoesNotExist:
                     request_value = None  # если заявки нет — не ломаем JSON
+                    paint_shop = None
 
                 data_atm.append({
                     "id": atm.id,
@@ -1455,6 +1461,7 @@ def act(request):
                     "pallet": atm.pallet,
                     "score_paint": atm.score_paint,
                     "request": request_value,
+                    "paint": paint_shop,
                 })
 
             # 🔹 Получаем акты (счета)

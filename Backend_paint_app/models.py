@@ -29,13 +29,27 @@ class CustomUser(AbstractUser):
 
 
 class Request(models.Model):
-    request_id = models.CharField(max_length=10, unique=True, blank=True)
-    project = models.CharField(max_length=100)
-    device = models.CharField(max_length=100)
-    quantity = models.PositiveIntegerField()
-    date_received = models.DateField()
-    deadline = models.DateField(null=True, blank=True)
-    status = models.TextField(default='Создана', blank=True, null=True)
+    request_id = models.CharField(max_length=10, unique=True, blank=True, verbose_name='Номер заявки')
+    project = models.CharField(max_length=100, verbose_name='Проект')
+    device = models.CharField(max_length=100, verbose_name='Производитель')
+    quantity = models.PositiveIntegerField(verbose_name='Количество')
+    date_received = models.DateField(verbose_name='Дата оприходования')
+    deadline = models.DateField(null=True, blank=True, verbose_name='Сроки')
+    status = models.TextField(default='Создана', blank=True, null=True, verbose_name='Статус')
+    PAINT_SHOP_CHOICES = [
+        ('aparinki', 'Апаринки'),
+        ('konstantinovo', 'Константиново'),
+        ('fokin', 'Фокин'),
+    ]
+
+    paint_shop = models.CharField(
+        max_length=30,
+        choices=PAINT_SHOP_CHOICES,
+        blank=True,
+        null=True,
+        default='aparinki',
+        verbose_name='Покрасочная'
+    )
 
     class Meta:
         verbose_name = "Заявки"
