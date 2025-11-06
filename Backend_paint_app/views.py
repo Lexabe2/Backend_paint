@@ -31,6 +31,7 @@ import io
 from .token_required import token_required
 from .funk import changes_req, changes_req_atm_funk, changes_status_atm_funk, scan_word_file
 from urllib.parse import quote
+import re
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -210,16 +211,27 @@ def dashboard(request):
 
 class LogView(APIView):
     def get(self, request):
-        _ = self
         log_file_path = os.path.join(settings.BASE_DIR, 'logs/django.log')
         if not os.path.exists(log_file_path):
             return Response({'logs': ['Лог-файл не найден']}, status=404)
 
         try:
             with open(log_file_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()[-100:]  # последние 100 строк
-            log_request_info(logger_app, request, 'Пользователь просматривает логи', level='info')
-            return Response({'logs': lines})
+                raw_lines = f.readlines()[-1000:]  # берем больше строк
+            logs = []
+            current_block = []
+
+            for line in raw_lines:
+                if line.startswith("ERROR") or line.startswith("WARNING") or line.startswith("INFO"):
+                    if current_block:
+                        logs.append("".join(current_block))
+                    current_block = [line]
+                else:
+                    current_block.append(line)
+            if current_block:
+                logs.append("".join(current_block))
+
+            return Response({'logs': logs})
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
