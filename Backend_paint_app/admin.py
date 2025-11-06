@@ -14,8 +14,8 @@ class CustomUserAdmin(UserAdmin):
     add_fieldsets = UserAdmin.add_fieldsets + (
         (None, {'fields': ('role', 'telegram_id')}),  # Добавил role
     )
+
 admin.site.register(Request)
-admin.site.register(ATM)
 admin.site.register(ATMImage)
 admin.site.register(ModelAtm)
 admin.site.register(ProjectData)
@@ -29,10 +29,21 @@ admin.site.register(WarehouseHistory)
 admin.site.register(InvoicePaint)
 
 
+@admin.register(ATM)
+class ATMAdmin(admin.ModelAdmin):
+    list_display = ('serial_number', 'model', 'pallet', 'status', 'user', 'request', 'score_paint')
+
+    # 🔹 Фильтр по заявке
+    list_filter = ('request', 'status', 'score_paint')  # добавь другие поля, если нужно
+
+    # 🔹 Поиск по серийному номеру
+    search_fields = ('serial_number', 'model')  # можно добавить model для поиска по модели
+
 
 class ReclamationPhotoInline(admin.TabularInline):
     model = ReclamationPhoto
     extra = 1
+
 
 @admin.register(Reclamation)
 class ReclamationAdmin(admin.ModelAdmin):
