@@ -1694,7 +1694,7 @@ def update_payment(request):
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
-def update_dates(request):
+def update_dates_flow(request):
     ids = request.data.get("ids", [])
     issue_date = request.data.get("issue_date")
     signing_date = request.data.get("signing_date")
@@ -1715,4 +1715,43 @@ def update_dates(request):
     if updates:
         SerialNumber.objects.filter(id__in=ids).update(**updates)
 
+    return JsonResponse({"success": True})
+
+
+STATUS_MAP = {
+    "Не поступал": "new",
+    "Получен": "received",
+    "Окрашивается": "paint",
+    "Счет выставлен": "waiting_payment",
+    "Оплачен": "paid",
+}
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_status_flow(request):
+    ids = request.data.get("ids", [])
+    status_rus = request.data.get("status")
+
+    if not ids:
+        return JsonResponse({"error": "Не указаны IDs"}, status=400)
+
+    if not status_rus or status_rus not in STATUS_MAP:
+        return JsonResponse({"error": "Некорректный статус"}, status=400)
+
+    code = STATUS_MAP[status_rus]  # получаем код
+    SerialNumber.objects.filter(id__in=ids).update(status=code)
+    return JsonResponse({"success": True})
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_note_flow(request):
+    ids = request.data.get("ids", [])
+    note = request.data.get("note")
+
+    if not ids:
+        return JsonResponse({"error": "Не указаны IDs"}, status=400)
+
+    SerialNumber.objects.filter(id__in=ids).update(note=note)
     return JsonResponse({"success": True})
