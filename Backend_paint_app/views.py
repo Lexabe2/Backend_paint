@@ -878,7 +878,9 @@ def warehouse_atms(request):
               )["total"] or 0
 
     # Последняя заявка
-    last_request = Request.objects.order_by('-request_id').first()
+    last_request = Request.objects.annotate(
+        request_id_int=Cast('request_id', IntegerField())
+    ).order_by('-request_id_int').first()
     last_request_data = last_request.request_id if last_request else 0
 
     # Проекты
@@ -1664,7 +1666,6 @@ def flow_detail(request, pk):
             "number": sn.number,
             "sn": sn.sn,
             "status": sn.get_status_display(),
-            "act_number": sn.act_number or None,
             "issue_date": sn.issue_date.strftime("%Y-%m-%d") if sn.issue_date else None,
             "signing_date": sn.signing_date.strftime("%Y-%m-%d") if sn.signing_date else None,
             "payment_to_yakovlev": sn.payment_to_yakovlev or None,
