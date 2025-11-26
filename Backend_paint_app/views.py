@@ -1,10 +1,11 @@
+import re
 from rest_framework.views import APIView
 from django.utils.dateparse import parse_date
 from rest_framework.decorators import parser_classes
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import CustomUser, ATM, ATMImage, Reclamation, ReclamationPhoto, ModelAtm, ProjectData, StatusReq, \
-    StatusATM, Work, ATMWorkStatus, Stage, WarehouseSlot, WarehouseHistory, Request, InvoicePaint
+    StatusATM, Work, ATMWorkStatus, Stage, WarehouseSlot, WarehouseHistory, Request, InvoicePaint, Flow, SerialNumber
 import requests
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes
@@ -23,15 +24,15 @@ from django.db.models.functions import Substr, Cast
 from django.db.models import IntegerField, Max, Sum
 from datetime import date
 import traceback
-from django.db.models import Count
 from django.utils import timezone
 import base64
 from PIL import Image
 import io
 from .token_required import token_required
-from .funk import changes_req, changes_req_atm_funk, changes_status_atm_funk, scan_word_file
+from .funk import changes_req, changes_req_atm_funk, changes_status_atm_funk, scan_word_file, add_flow
 from urllib.parse import quote
-import re
+from django.db.models import Count, Q
+from urllib.parse import urljoin
 
 logger = get_logger('user')  # или 'app', 'django' и т.д.
 logger_app = get_logger('app')
@@ -250,7 +251,10 @@ def create_request(request):
         if not all(field in data for field in required_fields):
             log_request_info(logger_app, request, 'Не все поля заполнены', level='error')
             return JsonResponse({'error': 'Не все поля заполнены'}, status=400)
-
+        if data['paint_shop'] == 'aparinki':
+            status = data.get('status') or 'Создана'
+        else:
+            status = 'Ожидает ПП'
         new_request = Request(
             project=data['project'],
             device=data['device'],
@@ -261,7 +265,7 @@ def create_request(request):
                 if data.get('deadline')
                 else None
             ),
-            status=data.get('status') or 'Создана',
+            status=status,
             paint_shop=data['paint_shop'],
         )
         log_request_info(logger_app, request, f'Заявка создана {data}', level='info')
@@ -836,7 +840,8 @@ def atm_raw_create(request):
             status=status,
             user=user
         )
-
+        if SerialNumber.objects.filter(sn=serial).exists():
+            SerialNumber.objects.filter(sn=serial).update(status='received')
         photos_saved = None
         if photos_data:  # только если список не пустой
             photos_saved = dec_photo(serial, photos_data, comment, status)
@@ -1561,3 +1566,153 @@ def upload_signature(request, pk):
 
     return Response(
         {"message": "Файл загружен успешно", "file_signature": request.build_absolute_uri(act.file_signature.url)})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def flows_list(request):
+    if request.method == "GET":
+        flows = Flow.objects.all().annotate(
+            total=Count('serial_numbers'),
+            new_count=Count('serial_numbers', filter=Q(serial_numbers__status='new')),
+            received_count=Count('serial_numbers', filter=Q(serial_numbers__status='received')),
+            paint_count=Count('serial_numbers', filter=Q(serial_numbers__status='paint')),
+            waiting_payment_count=Count('serial_numbers', filter=Q(serial_numbers__status='waiting_payment')),
+            paid_count=Count('serial_numbers', filter=Q(serial_numbers__status='paid'))
+        )
+        file_url = request.build_absolute_uri(
+            urljoin(settings.MEDIA_URL, "samples/pattern_add_flow.xlsx")
+        )
+
+        data = [{
+            "file": file_url  # <--- Вот СЮДА ложим URL а НЕ путь на диске!
+        }]
+        for flow in flows:
+            data.append({
+                "id": flow.id,
+                "name": flow.name,
+                "created_at": flow.created_at.strftime('%Y-%m-%d'),
+
+                "total": flow.total,
+                "statuses": {
+                    "new": flow.new_count,
+                    "received": flow.received_count,
+                    "paint": flow.paint_count,
+                    "waiting_payment": flow.waiting_payment_count,
+                    "paid": flow.paid_count
+                }
+            })
+
+        return JsonResponse(data, safe=False)
+    return JsonResponse({"error": "Метод не реализован"}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_flow(request):
+    if request.method == "POST":
+        add_flow(request.FILES['file'], request.POST.get("name"))
+        return JsonResponse('success', safe=False)
+    return JsonResponse({"error": "Метод не реализован"}, status=400)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def flow_detail(request, pk):
+    try:
+        flow = Flow.objects.get(id=pk)
+    except Flow.DoesNotExist:
+        return JsonResponse({"error": "Поток не найден"}, status=404)
+
+    data_flow = []
+
+    for sn in SerialNumber.objects.filter(flow=flow):
+        # ищем ATM с таким же серийным номером
+        atm_data = None
+        try:
+            atm = ATM.objects.get(serial_number=sn.sn)
+
+            # извлекаем номер покраски из score_paint
+            match = re.search(r'№(\d+)', atm.score_paint or "")
+            paint_number = match.group(1) if match else None
+
+            # ищем счет по номеру покраски
+            invoice = None
+            paid = False
+            if paint_number:
+                try:
+                    invoice = InvoicePaint.objects.get(number=paint_number)
+                    paid = bool(invoice.file_signature)
+                except InvoicePaint.DoesNotExist:
+                    invoice = None
+                    paid = False
+
+            atm_data = {
+                "status": atm.status,
+                "accepted_at": atm.accepted_at.strftime("%Y-%m-%d") if atm.accepted_at else None,
+                "paint_number": paint_number,
+                "invoice_paid": paid,
+                "invoice_file": request.build_absolute_uri(invoice.file.url) if invoice and invoice.file else None,
+                "invoice_signature_file": request.build_absolute_uri(
+                    invoice.file_signature.url) if invoice and invoice.file_signature else None,
+            }
+        except ATM.DoesNotExist:
+            atm_data = None
+
+        data_flow.append({
+            "id": sn.id,
+            "number": sn.number,
+            "sn": sn.sn,
+            "status": sn.get_status_display(),
+            "act_number": sn.act_number or None,
+            "issue_date": sn.issue_date.strftime("%Y-%m-%d") if sn.issue_date else None,
+            "signing_date": sn.signing_date.strftime("%Y-%m-%d") if sn.signing_date else None,
+            "payment_to_yakovlev": sn.payment_to_yakovlev or None,
+            "note": sn.note or None,
+            "atm": atm_data,
+        })
+
+    return JsonResponse({
+        "id": flow.id,
+        "name": flow.name,
+        "serial_numbers": data_flow
+    }, safe=False)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_payment(request):
+    ids = request.data.get("ids", [])
+    value = request.data.get("value", "")
+
+    if not ids:
+        return JsonResponse({"error": "Не указаны IDs"}, status=400)
+
+    SerialNumber.objects.filter(id__in=ids).update(payment_to_yakovlev=value)
+    return JsonResponse({"success": True})
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_dates(request):
+    ids = request.data.get("ids", [])
+    issue_date = request.data.get("issue_date")
+    signing_date = request.data.get("signing_date")
+
+    if not ids:
+        return JsonResponse({"error": "Не указаны IDs"}, status=400)
+
+    updates = {}
+
+    # обновлять только если НЕ пустая строка и НЕ None
+    if issue_date:
+        updates['issue_date'] = issue_date
+
+    if signing_date:
+        updates['signing_date'] = signing_date
+
+    # Если обновлений нет — не выполняем update
+    if updates:
+        SerialNumber.objects.filter(id__in=ids).update(**updates)
+
+    return JsonResponse({"success": True})

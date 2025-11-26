@@ -1,10 +1,10 @@
-from .models import ATM, Request, StatusReq, StatusATM
+from .models import ATM, Request, StatusReq, StatusATM, Flow, SerialNumber
 from datetime import date
 from django.core.exceptions import ObjectDoesNotExist
 from docx import Document
 from docx.shared import Pt
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.oxml.ns import qn
+import openpyxl
 
 months = {
     1: "январь", 2: "февраль", 3: "март", 4: "апрель",
@@ -139,3 +139,13 @@ def scan_word_file(file_path, number, project, model, atm_sn, date_inv):
 
     # === СОХРАНЯЕМ ФАЙЛ ===
     doc.save(f'media/invoices/АВР_по_покраске_№{number}.docx')
+
+
+def add_flow(excel_file, flow_name):
+    Flow.objects.create(name=flow_name, created_at=date.today())
+    wb = openpyxl.load_workbook(excel_file)
+    sheet = wb.active
+    number = 0
+    for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row):
+        number += 1
+        SerialNumber.objects.create(flow=Flow.objects.get(name=flow_name), number=number, sn=row[0].value, status='new')

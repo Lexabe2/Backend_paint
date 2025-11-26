@@ -52,4 +52,10 @@ urlpatterns = [
     path("status_atm/", views.status_atm, name="status_atm"),
     path("atm_act/", views.act, name="act"),
     path('acts/<int:pk>/upload-signature/', views.upload_signature, name='upload_signature'),
+    path('flow_list/', views.flows_list, name='flows_list'),
+    path('upload_flow/', views.upload_flow, name='upload_flow'),
+    path('flow_detail/<int:pk>/', views.flow_detail, name='flow_detail'),
+    path('update_payment/', views.update_payment, name='update_payment'),
+    path('update_dates/', views.update_dates, name='update_dates'),
+
 ]

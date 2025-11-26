@@ -92,6 +92,7 @@ class ATM(models.Model):
         blank=True,
     )
     score_paint = models.CharField(max_length=100, default='Не добавлен в счет', blank=True)
+
     class Meta:
         verbose_name = "Банкомат"
         verbose_name_plural = "Банкоматы"
@@ -362,7 +363,6 @@ class WarehouseHistory(models.Model):
         verbose_name_plural = "История склада"
 
 
-
 class InvoicePaint(models.Model):
     number = models.CharField("Номер счета", max_length=50, unique=True)
     created_at = models.DateField("Дата создания", default=timezone.now)
@@ -379,3 +379,45 @@ class InvoicePaint(models.Model):
 
     def __str__(self):
         return f"Счет №{self.number} от {self.created_at}"
+
+
+class Flow(models.Model):
+    """Модель потока"""
+    name = models.CharField(max_length=255, verbose_name="Название потока")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+
+    class Meta:
+        verbose_name = "Поток"
+        verbose_name_plural = "Потоки"
+
+    def __str__(self):
+        return self.name
+
+
+class SerialNumber(models.Model):
+    """Модель серийного номера в потоке"""
+    STATUS_CHOICES = [
+        ('new', 'Не поступал'),
+        ('received', 'Получен'),
+        ('paint', 'Окрашивается'),
+        ('waiting_payment', 'Счет выставлен'),
+        ('paid', 'Оплачен'),
+    ]
+
+    flow = models.ForeignKey(Flow, related_name='serial_numbers', on_delete=models.CASCADE, verbose_name="Поток")
+    number = models.PositiveIntegerField(verbose_name="№")
+    sn = models.CharField(max_length=100, verbose_name="S/N")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new', verbose_name="Статус")
+    act_number = models.CharField(max_length=100, blank=True, null=True, verbose_name="Номер акта")
+    issue_date = models.DateField(blank=True, null=True, verbose_name="Дата выставления")
+    signing_date = models.DateField(blank=True, null=True, verbose_name="Дата подписания")
+    payment_to_yakovlev = models.TextField(blank=True, null=True,
+                                           verbose_name="Оплата Яковлеву")
+    note = models.TextField(blank=True, null=True, verbose_name='Примечание')
+
+    class Meta:
+        verbose_name = "Поток серийные номера"
+        verbose_name_plural = "Поток серийные номера"
+
+    def __str__(self):
+        return f"{self.number} - {self.sn}"
