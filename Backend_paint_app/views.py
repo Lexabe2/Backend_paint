@@ -1685,6 +1685,7 @@ STATUS_MAP = {
     "Получен": "received",
     "Окрашивается": "paint",
     "Счет выставлен": "waiting_payment",
+    "Ожидает оплаты": "awaiting payment",
     "Оплачен": "paid",
 }
 

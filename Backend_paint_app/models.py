@@ -401,6 +401,7 @@ class SerialNumber(models.Model):
         ('received', 'Получен'),
         ('paint', 'Окрашивается'),
         ('waiting_payment', 'Счет выставлен'),
+        ('awaiting payment', 'Ожидает оплаты'),
         ('paid', 'Оплачен'),
     ]
 
