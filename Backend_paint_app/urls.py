@@ -55,9 +55,5 @@ urlpatterns = [
     path('flow_list/', views.flows_list, name='flows_list'),
     path('upload_flow/', views.upload_flow, name='upload_flow'),
     path('flow_detail/<int:pk>/', views.flow_detail, name='flow_detail'),
-    path('update_payment/', views.update_payment, name='update_payment'),
-    path('update_dates_flow/', views.update_dates_flow, name='update_dates_flow'),
-    path('update_status_flow/', views.update_status_flow, name='update_status_flow'),
-    path('update_note_flow/', views.update_note_flow, name='update_note_flow'),
-
+    path('bulk_update_flow/', views.bulk_update_flow, name='bulk_update_flow'),
 ]

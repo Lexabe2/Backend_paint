@@ -1680,45 +1680,6 @@ def flow_detail(request, pk):
     }, safe=False)
 
 
-@api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
-def update_payment(request):
-    ids = request.data.get("ids", [])
-    value = request.data.get("value", "")
-
-    if not ids:
-        return JsonResponse({"error": "Не указаны IDs"}, status=400)
-
-    SerialNumber.objects.filter(id__in=ids).update(payment_to_yakovlev=value)
-    return JsonResponse({"success": True})
-
-
-@api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
-def update_dates_flow(request):
-    ids = request.data.get("ids", [])
-    issue_date = request.data.get("issue_date")
-    signing_date = request.data.get("signing_date")
-
-    if not ids:
-        return JsonResponse({"error": "Не указаны IDs"}, status=400)
-
-    updates = {}
-
-    # обновлять только если НЕ пустая строка и НЕ None
-    if issue_date:
-        updates['issue_date'] = issue_date
-
-    if signing_date:
-        updates['signing_date'] = signing_date
-
-    # Если обновлений нет — не выполняем update
-    if updates:
-        SerialNumber.objects.filter(id__in=ids).update(**updates)
-
-    return JsonResponse({"success": True})
-
-
 STATUS_MAP = {
     "Не поступал": "new",
     "Получен": "received",
@@ -1727,32 +1688,40 @@ STATUS_MAP = {
     "Оплачен": "paid",
 }
 
-
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
-def update_status_flow(request):
+def bulk_update_flow(request):
     ids = request.data.get("ids", [])
+    if not ids:
+        return JsonResponse({"error": "Не указаны IDs"}, status=400)
+
+    updates = {}
+
+    # 1. Даты — обновляем только если значение не пустое и не None
+    issue_date = request.data.get("issue_date")
+    signing_date = request.data.get("signing_date")
+    if issue_date:
+        updates["issue_date"] = issue_date
+    if signing_date:
+        updates["signing_date"] = signing_date
+
+    # 2. Статус
     status_rus = request.data.get("status")
+    if status_rus:
+        if status_rus not in STATUS_MAP:
+            return JsonResponse({"error": "Некорректный статус"}, status=400)
+        updates["status"] = STATUS_MAP[status_rus]
 
-    if not ids:
-        return JsonResponse({"error": "Не указаны IDs"}, status=400)
-
-    if not status_rus or status_rus not in STATUS_MAP:
-        return JsonResponse({"error": "Некорректный статус"}, status=400)
-
-    code = STATUS_MAP[status_rus]  # получаем код
-    SerialNumber.objects.filter(id__in=ids).update(status=code)
-    return JsonResponse({"success": True})
-
-
-@api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
-def update_note_flow(request):
-    ids = request.data.get("ids", [])
+    # 3. Заметка (можно передавать пустую строку — она очистит поле)
     note = request.data.get("note")
+    if note is not None:  # None не придёт из JSON, но на всякий случай
+        updates["note"] = note
 
-    if not ids:
-        return JsonResponse({"error": "Не указаны IDs"}, status=400)
+    # 4. Оплата Яковлеву (можно передавать пустую строку — очистит)
+    payment = request.data.get("value")  # ты используешь "value" в запросе
+    if payment is not None:
+        updates["payment_to_yakovlev"] = payment
 
-    SerialNumber.objects.filter(id__in=ids).update(note=note)
+    # Выполняем обновление (даже если updates пустой — ничего не изменится, это безопасно)
+    SerialNumber.objects.filter(id__in=ids).update(**updates)
     return JsonResponse({"success": True})
