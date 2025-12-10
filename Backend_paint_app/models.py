@@ -364,7 +364,7 @@ class WarehouseHistory(models.Model):
 
 
 class InvoicePaint(models.Model):
-    number = models.PositiveIntegerField("Номер счета", max_length=50, unique=True)
+    number = models.PositiveIntegerField("Номер счета", unique=True)
     created_at = models.DateField("Дата создания", default=timezone.now)
     file = models.FileField("Файл счета (.docx)", upload_to="invoices/")
     file_signature = models.FileField("Файл счета (подписанный) (.pdf)", upload_to="signature/")
