@@ -1,3 +1,4 @@
+from django.db.models import F
 import re
 from rest_framework.views import APIView
 from django.utils.dateparse import parse_date
@@ -1332,8 +1333,11 @@ def acceptance_pp(request):
     body = request.data
     status = request.GET.get("status")
     if request.method == "GET":
-        list_atm = ATM.objects.filter(status=status).values('serial_number', 'pallet', 'status',
-                                                            'model')
+        list_atm = ATM.objects.filter(status=status).annotate(
+            project_name=F('request__project')
+        ).values(
+            'serial_number', 'pallet', 'status', 'model', 'request', 'project_name'
+        )
         return JsonResponse({"data": list(list_atm)})
     if request.method == "POST":
         atm_serials = body.get("atms", [])
