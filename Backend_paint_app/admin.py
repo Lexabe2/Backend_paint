@@ -1,8 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import CustomUser, Request, ATM, ATMImage, ModelAtm, ProjectData, StatusReq, \
-    StatusATM, Work, Stage, ATMWorkStatus, WarehouseSlot, WarehouseHistory, InvoicePaint, Flow, SerialNumber, \
-    GoogleToken
+    StatusATM, Work, Stage, ATMWorkStatus, WarehouseSlot, WarehouseHistory, InvoicePaint, Flow, SerialNumber
 
 
 @admin.register(CustomUser)
@@ -31,8 +30,6 @@ admin.site.register(WarehouseHistory)
 admin.site.register(InvoicePaint)
 admin.site.register(Flow)
 admin.site.register(SerialNumber)
-admin.site.register(GoogleToken)
-
 
 @admin.register(ATM)
 class ATMAdmin(admin.ModelAdmin):
