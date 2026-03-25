@@ -1,7 +1,8 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, Request, ATM, ATMImage, ReclamationPhoto, Reclamation, ModelAtm, ProjectData, StatusReq, \
-    StatusATM, Work, Stage, ATMWorkStatus, WarehouseSlot, WarehouseHistory, InvoicePaint, Flow, SerialNumber
+from .models import CustomUser, Request, ATM, ATMImage, ModelAtm, ProjectData, StatusReq, \
+    StatusATM, Work, Stage, ATMWorkStatus, WarehouseSlot, WarehouseHistory, InvoicePaint, Flow, SerialNumber, \
+    GoogleToken
 
 
 @admin.register(CustomUser)
@@ -14,6 +15,7 @@ class CustomUserAdmin(UserAdmin):
     add_fieldsets = UserAdmin.add_fieldsets + (
         (None, {'fields': ('role', 'telegram_id')}),  # Добавил role
     )
+
 
 admin.site.register(Request)
 admin.site.register(ATMImage)
@@ -29,25 +31,20 @@ admin.site.register(WarehouseHistory)
 admin.site.register(InvoicePaint)
 admin.site.register(Flow)
 admin.site.register(SerialNumber)
+admin.site.register(GoogleToken)
 
 
 @admin.register(ATM)
 class ATMAdmin(admin.ModelAdmin):
     list_display = ('serial_number', 'model', 'pallet', 'status', 'user', 'request', 'score_paint')
 
-    # 🔹 Фильтр по заявке
-    list_filter = ('request', 'status', 'score_paint')  # добавь другие поля, если нужно
+    list_filter = ('request', 'status', 'score_paint')
 
-    # 🔹 Поиск по серийному номеру
-    search_fields = ('serial_number', 'model')  # можно добавить model для поиска по модели
+    search_fields = ('serial_number', 'model')
 
+    actions = ['add_to_invoice', 'remove_from_invoice']
 
-class ReclamationPhotoInline(admin.TabularInline):
-    model = ReclamationPhoto
-    extra = 1
-
-
-@admin.register(Reclamation)
-class ReclamationAdmin(admin.ModelAdmin):
-    list_display = ('id', 'serial_number', 'created_at')
-    inlines = [ReclamationPhotoInline]
+    # Убрать из счета
+    @admin.action(description="Убрать из счета")
+    def remove_from_invoice(self, request, queryset):
+        queryset.update(score_paint="Без акта")
