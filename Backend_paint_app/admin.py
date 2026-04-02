@@ -44,11 +44,12 @@ class ATMAdmin(admin.ModelAdmin):
 
     actions = ['add_to_invoice', 'remove_from_invoice']
 
+    # Добавить в счет
+    @admin.action(description="Добавить в счет")
+    def add_to_invoice(self, request, queryset):
+        queryset.update(score_paint="Не добавлен в счет")
+
     # Убрать из счета
     @admin.action(description="Убрать из счета")
     def remove_from_invoice(self, request, queryset):
         queryset.update(score_paint="Без акта")
-
-    @admin.action(description="Восстановить счет")
-    def remove_from_invoice(self, request, queryset):
-        queryset.update(score_paint="Не добавлен в счет")
