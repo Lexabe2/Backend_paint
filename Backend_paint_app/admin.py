@@ -1,7 +1,8 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import CustomUser, Request, ATM, ATMImage, ModelAtm, ProjectData, StatusReq, \
-    StatusATM, Work, Stage, ATMWorkStatus, WarehouseSlot, WarehouseHistory, InvoicePaint, Flow, SerialNumber
+    StatusATM, Work, Stage, ATMWorkStatus, WarehouseSlot, WarehouseHistory, InvoicePaint, Flow, SerialNumber, \
+    GoogleToken
 
 
 @admin.register(CustomUser)
@@ -30,6 +31,8 @@ admin.site.register(WarehouseHistory)
 admin.site.register(InvoicePaint)
 admin.site.register(Flow)
 admin.site.register(SerialNumber)
+admin.site.register(GoogleToken)
+
 
 @admin.register(ATM)
 class ATMAdmin(admin.ModelAdmin):
@@ -45,3 +48,7 @@ class ATMAdmin(admin.ModelAdmin):
     @admin.action(description="Убрать из счета")
     def remove_from_invoice(self, request, queryset):
         queryset.update(score_paint="Без акта")
+
+    @admin.action(description="Восстановить счет")
+    def remove_from_invoice(self, request, queryset):
+        queryset.update(score_paint="Не добавлен в счет")
