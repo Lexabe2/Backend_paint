@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_extensions',
     'rest_framework',
     'corsheaders',
     'djoser',
@@ -44,6 +45,12 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'  # или cached_db
+SESSION_COOKIE_SECURE = False  # важно для http localhost
+SESSION_COOKIE_HTTPONLY = True
+
+
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",       # фронтенд локально
@@ -83,6 +90,12 @@ TEMPLATES = [
             ],
         },
     },
+]
+
+CORS_ALLOW_HEADERS = [
+    'content-type',
+    'Authorization',  # Если вы используете токены
+    'X-Requested-With',
 ]
 
 WSGI_APPLICATION = 'Backend_paint.wsgi.application'

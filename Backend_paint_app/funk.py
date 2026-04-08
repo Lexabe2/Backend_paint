@@ -1,10 +1,12 @@
-from .models import ATM, Request, StatusReq, StatusATM, Flow, SerialNumber
+from .models import ATM, Request, StatusReq, StatusATM
 from datetime import date
 from django.core.exceptions import ObjectDoesNotExist
 from docx import Document
 from docx.shared import Pt
 from docx.oxml.ns import qn
-import openpyxl
+from openpyxl.styles import Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+import re
 
 months = {
     1: "январь", 2: "февраль", 3: "март", 4: "апрель",
@@ -141,11 +143,79 @@ def scan_word_file(file_path, number, project, model, atm_sn, date_inv):
     doc.save(f'media/invoices/АВР_по_покраске_№{number}.docx')
 
 
-def add_flow(excel_file, flow_name):
-    Flow.objects.create(name=flow_name, created_at=date.today())
-    wb = openpyxl.load_workbook(excel_file)
-    sheet = wb.active
-    number = 0
-    for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row):
-        number += 1
-        SerialNumber.objects.create(flow=Flow.objects.get(name=flow_name), number=number, sn=row[0].value, status='new')
+def _safe_filename(name: str) -> str:
+    name = (name or "UNKNOWN").strip()
+    name = re.sub(r"[^\w\s\-\.]", "", name, flags=re.U)
+    name = re.sub(r"\s+", "_", name).strip("_")
+    return name[:80] if name else "UNKNOWN"
+
+
+def _has_date(text: str) -> bool:
+    t = (text or "").strip()
+    if not t:
+        return False
+    return bool(re.search(
+        r"(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(\d{4}[./-]\d{1,2}[./-]\d{1,2})",
+        t
+    ))
+
+
+def autosize_columns(ws, min_width=10, max_width=60):
+    for col_idx, col_cells in enumerate(ws.columns, start=1):
+        max_length = 0
+        for cell in col_cells:
+            if cell.value:
+                max_length = max(max_length, len(str(cell.value)))
+
+        adjusted_width = min(max_width, max(min_width, max_length + 2))
+        ws.column_dimensions[get_column_letter(col_idx)].width = adjusted_width
+
+
+def limit_columns_by_model(ws, header_name="Модель", default_width=30):
+    model_col_idx = None
+
+    for col_idx, cell in enumerate(ws[1], start=1):
+        if str(cell.value).strip() == header_name:
+            model_col_idx = col_idx
+            break
+
+    if model_col_idx:
+        model_letter = get_column_letter(model_col_idx)
+        max_width = ws.column_dimensions[model_letter].width or default_width
+    else:
+        max_width = default_width
+
+    for col_idx in range(1, ws.max_column + 1):
+        col_letter = get_column_letter(col_idx)
+        ws.column_dimensions[col_letter].width = max_width
+
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.value:
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+
+def format_sheet(ws, header_name="Модель", default_width=30):
+    thin = Side(style="thin")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    model_col_idx = None
+
+    for col_idx, cell in enumerate(ws[1], start=1):
+        if str(cell.value).strip() == header_name:
+            model_col_idx = col_idx
+            break
+
+    if model_col_idx:
+        model_letter = get_column_letter(model_col_idx)
+        max_width = ws.column_dimensions[model_letter].width or default_width
+    else:
+        max_width = default_width
+
+    for col_idx in range(1, ws.max_column + 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = max_width
+
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+            cell.border = border
